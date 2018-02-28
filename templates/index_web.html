@@ -1,0 +1,99 @@
+<!--
+Copyright 2015-2016 Carnegie Mellon University
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Face Recognition</title>
+        <link href="{{url_for('static',filename='vendor/css/bootstrap.min.css')}}" rel="stylesheet">
+        <link href="{{url_for('static',filename='vendor/css/bootstrap-toggle.min.css')}}" rel="stylesheet">
+        <link href="{{url_for('static',filename='vendor/css/bootstrap.min.css')}}" rel="stylesheet">
+        <link href="{{url_for('static',filename='css/main.css')}}" rel="stylesheet">
+    </head>
+    <body>
+        <div class="container">
+            <div class="header" style="visibility:hidden;" id="cameradiv">
+                <video id="videocamera" width="640" height="480" preload="auto"/>
+            </div>
+            <div class="header" style="visibility:hidden;" id="videodiv">
+                <img src="{{ url_for('video_feed') }}" width="800" height="600">
+            </div>
+            <div class="header" style="visibility:hidden;" id="canvasdiv">
+                <canvas id="canvasoutput" width="800" height="600"/>
+            </div>
+            <div class="content2">
+                <h4>All Names:</h4>
+                <textarea style="resize:none" readonly id="identity" cols ="50" rows = "4"></textarea>
+            </div>
+            <div class="content1">
+                <h4>Input Your Name:
+                    <input type="text" id="addPersonTxt" style="width:20%;border:1.5px solid #000">
+                </h4>
+                <h4>
+                    <button type="button" id="btn_start">Training</button>
+                    <button type="button" id="btn_delete">Delete Person</button>
+                    Status: <span id="trainingStatus"></span>
+                </h4>
+                <div style="display:none;" id="processdiv">
+                    <h4>Face Left :
+                        <progress value="0" class="mypro" id="processleft"  max="15"/>
+                    </h4>
+                    <h4>Face Right
+                        <progress value="0" class="mypro" id="processright" max="15"/>
+                    </h4>
+                    <h4>Face Front
+                        <progress value="0" class="mypro" id="processfront" max="15"/>
+                    </h4>
+                 </div>
+                <div style="display:none;" id="processimg">
+                    <h4>Traing on Cloud
+                         <img src="{{url_for('static', filename='images/loading.gif')}}"/>
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script src="{{url_for('static',filename='vendor/js/jquery.min.js')}}"></script>
+    <script src="{{url_for('static',filename='vendor/js/bootstrap.min.js')}}"></script>
+    <script src="{{url_for('static',filename='vendor/js/bootstrap-toggle.min.js')}}"></script>
+    <script src="{{url_for('static',filename='vendor/js/bootstrap-dialog.min.js')}}"></script>
+    <script src="{{url_for('static',filename='vendor/js/handlebars.min.js')}}"></script>
+    <script src="{{url_for('static',filename='vendor/js/jstat.min.js')}}"></script>
+    <script src="{{url_for('static',filename='js/facereg-demo.js')}}"></script>
+    <script type="text/javascript">
+     var people = '', training = false, socket;
+     var bufferCtx = [], bufferConvas = [], currentCtx;
+     var recgRet, vidReady = false;
+     const bufNum = 20;
+     console.log("Start");
+
+     $('#btn_start').click(btnStartOnclick);
+     //$('#btn_finish').click(btnFinishOnclick);
+     $('#btn_delete').click(btnDeleteOnclick);
+
+     var video=document.getElementById('videocamera');
+     var canvas=document.getElementById('canvasoutput');  
+     var outputCtx=canvas.getContext('2d');
+     var scale = canvas.width/video.width;
+
+
+     createSocket("wss://" + window.location.hostname + ":9000");
+
+    </script>
+</html>
