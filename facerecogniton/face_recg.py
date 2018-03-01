@@ -29,7 +29,7 @@ aligner = AlignCustom();
 extract_feature = FaceFeature()
 face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
 
-CAMERA_NUMBER = 1
+CAMERA_NUMBER = 4
 
 face_tracker = []
 for i in range(CAMERA_NUMBER):
@@ -46,16 +46,19 @@ Images from Video Capture -> detect faces' regions -> crop those faces and align
     
 '''
 class CameraRouad:
-    def __init__();
+    def __init__(self):
         self.aligns = []
         self.positions = []
         self.faces = []
         self.rets = []
         self.rects = []
 
-def recog_process_frame(frames)
+def recog_process_frame(frames):
+  try:
     cameras = []
     rets = []
+    aligns = []
+    positions = []
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
@@ -63,29 +66,35 @@ def recog_process_frame(frames)
         face_tracker[index].increase_frame()
         for (i, rect) in enumerate(cameras[index].rects):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
-            face = face_tracker.get_face_by_position(rect, aligned_face)
-            faces.append(face)
+            face = face_tracker[index].get_face_by_position(rect, aligned_face)
+            cameras[index].faces.append(face)
             if (face.get_name() == None):
                 cameras[index].aligns.append(aligned_face)
                 cameras[index].positions.append(face_pos)
             else:
                 cameras[index].rets.append({"name":face.get_name(), "rect":rect})
 
-    if (len(aligns) == 0)
+    for c in cameras:
+        aligns += c.aligns
+        positions += c.positions
+    if (len(aligns) == 0):
+        for (index,camera) in enumerate(cameras):
+            rets.append(camera.rets)
         return rets
+
     features_arr = extract_feature.get_features(aligns)
     recog_data = findPeople(features_arr,positions);
 
+    j = 0
     for (index,camera) in enumerate(cameras):
-        j = 0
-        for (i,rect) in enumerate(rects):
+        for (i,rect) in enumerate(camera.rects):
             face = camera.faces[i]
             if (face.get_name() == None):
                 face.set_name(recog_data[j])
                 camera.rets.append({"name":recog_data[j], "rect":rect})
                 j += 1
         face_tracker[index].drop_timeout_face()
-        rets.append[camera.rets]
+        rets.append(camera.rets)
     return rets
   except Exception as e:
     print e
