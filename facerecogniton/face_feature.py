@@ -30,8 +30,6 @@ class FaceFeature(object):
         images = load_data_list(input_imgs,160)
         return self.sess.run(self.embeddings, feed_dict = {self.x : images})
 
-
-
 #some image preprocess stuff
 def prewhiten(x):
     mean = np.mean(x)

@@ -22,11 +22,15 @@ import numpy as np
 from PIL import Image
 import StringIO
 import threading
+from face_tracker import *
 
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
 face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
+face_tracker = FaceTracker()
+
+CAMERA_NUMBER = 4
 
 '''
 Description:
@@ -41,19 +45,34 @@ Images from Video Capture -> detect faces' regions -> crop those faces and align
 
 def recog_process_frame(frame):
     rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+    face_tracker.increase_frame()
     aligns = []
     positions = []
     rets = []
+    faces = []
     for (i, rect) in enumerate(rects):
         aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
-        aligns.append(aligned_face)
-        positions.append(face_pos)
+        face = face_tracker.get_face_by_position(rect, aligned_face)
+        faces.append(face)
+        if (face.get_name() == None):
+            aligns.append(aligned_face)
+            positions.append(face_pos)
+        else:
+            rets.append({"name":face.get_name(), "rect":rect})
+
     if (len(aligns) == 0):
         return rets
     features_arr = extract_feature.get_features(aligns)
     recog_data = findPeople(features_arr,positions);
+
+    j = 0
     for (i,rect) in enumerate(rects):
-        rets.append({"name":recog_data[i], "rect":rect, "pos":positions[i]})
+        face = faces[i]
+        if (face.get_name() == None):
+            face.set_name(recog_data[j])
+            rets.append({"name":recog_data[j], "rect":rect})
+            j += 1
+    face_tracker.drop_timeout_face()
     return rets
 
 '''
@@ -105,7 +124,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
         if ret is not None:
             regRes.append(ret.encode("utf-8"))
         else:
-            regRes.append(" ".encode("utf-8"))
+            regRes.append("".encode("utf-8"))
     return regRes
 
 def detect_people(frame):
