@@ -44,6 +44,7 @@ Images from Video Capture -> detect faces' regions -> crop those faces and align
 '''
 
 def recog_process_frame(frame):
+  try:
     rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
     face_tracker.increase_frame()
     aligns = []
@@ -74,6 +75,8 @@ def recog_process_frame(frame):
             j += 1
     face_tracker.drop_timeout_face()
     return rets
+  except Exception as e:
+    print e
 
 '''
 facerec_128D.txt Data Structure:
@@ -124,7 +127,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
         if ret is not None:
             regRes.append(ret.encode("utf-8"))
         else:
-            regRes.append("".encode("utf-8"))
+            regRes.append(" ".encode("utf-8"))
     return regRes
 
 def detect_people(frame):

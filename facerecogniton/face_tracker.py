@@ -1,5 +1,5 @@
-import imagehash
-from PIL import Image
+#import imagehash
+#from PIL import Image
 
 
 SCORE_MAX_COUNT = 4
@@ -26,7 +26,7 @@ class FaceWindow:
         return float(sum(self.scores)) / len(self.scores)
 
     def set_name(self, name):
-        if name is not None and name != "":
+        if name is not None and name != " ":
             self.name = name + str(self.face_id)
 
     def get_name(self):
@@ -47,9 +47,9 @@ class FaceTracker:
         self.current_frame_count = 0
         self.face_list = []
 
-    def drop_timeout_face(self, frame_count):
+    def drop_timeout_face(self):
         for face in self.face_list:
-            if face.frame_seq + FRAME_KEEP_LIMIT < frame_count:
+            if face.frame_seq + FRAME_KEEP_LIMIT < self.current_frame_count:
                 self.face_list.remove(face)
 
     def get_new_face_id(self):
@@ -71,19 +71,21 @@ class FaceTracker:
                    and face.frame_seq + FRAME_KEEP_LIMIT >= self.current_frame_count):
                 found.append(face)
         if (len(found) != 1):
-            if (len(found) > 1)
+            if (len(found) > 1):
                 for face in found:
                     self.face_list.remove(face)
+            else:
             face_id = self.get_new_face_id();
-            found[0] = FaceWindow(x, y, face_id, self.current_frame_count)
-            self.face_list.append(found[0])
+            newface = FaceWindow(x, y, face_id, self.current_frame_count)
+            self.face_list.append(newface)
         else:
             found[0].x = x
             found[0].y = y
             found[0].frame_seq = self.current_frame_count
+            newface = found[0]
             
         #phash = str(imagehash.phash(Image.fromarray(image)))
         #print("get distance with before...\n", found[0].get_distance(phash))
         #found.set_phash(phash)
 
-        return found[0]
+        return newface
