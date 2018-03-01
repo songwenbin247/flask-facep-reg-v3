@@ -1,7 +1,3 @@
-#import imagehash
-#from PIL import Image
-
-
 SCORE_MAX_COUNT = 4
 TRACE_PIXELS = 100
 FRAME_KEEP_LIMIT = 10
@@ -74,7 +70,6 @@ class FaceTracker:
             if (len(found) > 1):
                 for face in found:
                     self.face_list.remove(face)
-            else:
             face_id = self.get_new_face_id();
             newface = FaceWindow(x, y, face_id, self.current_frame_count)
             self.face_list.append(newface)

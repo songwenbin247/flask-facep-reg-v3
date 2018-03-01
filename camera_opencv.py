@@ -5,7 +5,7 @@ import Queue
 
 
 class Camera(BaseCamera):
-    video_source = 0
+    video_source = range(facerecg.CAMERA_NUMBER)
     buffer_count = 10
     reg_ret = []
 
@@ -19,35 +19,49 @@ class Camera(BaseCamera):
 
     @staticmethod
     def frames():
-        frameq = Queue.Queue(maxsize=Camera.buffer_count)
-        camera = cv2.VideoCapture(Camera.video_source)
+        framequeue = []
+        cameras = []
+        images = []
+        for i in range(facerecg.CAMERA_NUMBER)
+            cameras.append(cv2.VideoCapture(Camera.video_source[i]))
+            if not cameras[i].isOpened():
+                raise RuntimeError('Could not start camera. Index:' , i)
+        framequeue = Queue.Queue(maxsize=Camera.buffer_count)
+
         #camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         #camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         recg_ret = []
 
-        if not camera.isOpened():
-            raise RuntimeError('Could not start camera.')
 
-        for i in range(Camera.buffer_count - 1):
-            _, img = camera.read()
-            frameq.put(img)
+        for i in range(facerecg.CAMERA_NUMBER)
+            for j in range(Camera.buffer_count - 1):
+                _, img =  cameras[i].read()
+                images.append(img)
+            framequeue.put(img)
 
         while True:
+            images = []
             # read current frame
-            _, img = camera.read()
-            facerecg.proCvFrame(img)
-            frameq.put(img)
-            img = frameq.get()
+            for i in range(facerecg.CAMERA_NUMBER):
+                _, img = cameras[i].read()
+                images_recg.append(img)
 
-            r = facerecg.getResult()
-            if r is not None:
-                recg_ret = r
+            facerecg.proCvFrame(images)
+            framequeue.put(images)
+            images = framequeues.get()
 
-            for ret in recg_ret:
-                #draw bounding box for the face
-                rect = ret['rect']
-                cv2.rectangle(img,(rect[0],rect[1]),(rect[0] + rect[2],rect[1]+rect[3]),(0,0,255),2)
-                cv2.putText(img, ret['name'],(rect[0],rect[1]),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,255),2)
+            rets = facerecg.getResult()
+
+            for i in range(facerecg.CAMERA_NUMBER):
+                for ret in rets[i]:
+                    #draw bounding box for the face
+                    rect = ret['rect']
+                    cv2.rectangle(images[i],(rect[0],rect[1]),(rect[0] + rect[2],rect[1]+rect[3]),(0,0,255),2)
+                    cv2.putText(images[i], ret['name'],(rect[0],rect[1]),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,255),2)
 
             # encode as a jpeg image and return it
-            yield cv2.imencode('.png', img)[1].tobytes()
+            if (len(images) == 1):
+                final = images[0]
+            else:
+                print("Error")
+            yield cv2.imencode('.png', final)[1].tobytes()

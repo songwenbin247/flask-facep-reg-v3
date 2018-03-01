@@ -28,9 +28,12 @@ from face_tracker import *
 aligner = AlignCustom();
 extract_feature = FaceFeature()
 face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
-face_tracker = FaceTracker()
 
-CAMERA_NUMBER = 4
+CAMERA_NUMBER = 1
+
+face_tracker = []
+for i in range(CAMERA_NUMBER):
+    face_tracker.append(FaceTracker())
 
 '''
 Description:
@@ -42,38 +45,47 @@ Images from Video Capture -> detect faces' regions -> crop those faces and align
     (Distance threshold is 0.6, percentage threshold is 70%)
     
 '''
+class CameraRouad:
+    def __init__();
+        self.aligns = []
+        self.positions = []
+        self.faces = []
+        self.rets = []
+        self.rects = []
 
-def recog_process_frame(frame):
-  try:
-    rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
-    face_tracker.increase_frame()
-    aligns = []
-    positions = []
+def recog_process_frame(frames)
+    cameras = []
     rets = []
-    faces = []
-    for (i, rect) in enumerate(rects):
-        aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
-        face = face_tracker.get_face_by_position(rect, aligned_face)
-        faces.append(face)
-        if (face.get_name() == None):
-            aligns.append(aligned_face)
-            positions.append(face_pos)
-        else:
-            rets.append({"name":face.get_name(), "rect":rect})
 
-    if (len(aligns) == 0):
+    for (index,frame) in enumerate(frames):
+        cameras.append(CameraRouad())
+        cameras[index].rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        face_tracker[index].increase_frame()
+        for (i, rect) in enumerate(cameras[index].rects):
+            aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
+            face = face_tracker.get_face_by_position(rect, aligned_face)
+            faces.append(face)
+            if (face.get_name() == None):
+                cameras[index].aligns.append(aligned_face)
+                cameras[index].positions.append(face_pos)
+            else:
+                cameras[index].rets.append({"name":face.get_name(), "rect":rect})
+
+    if (len(aligns) == 0)
         return rets
     features_arr = extract_feature.get_features(aligns)
     recog_data = findPeople(features_arr,positions);
 
-    j = 0
-    for (i,rect) in enumerate(rects):
-        face = faces[i]
-        if (face.get_name() == None):
-            face.set_name(recog_data[j])
-            rets.append({"name":recog_data[j], "rect":rect})
-            j += 1
-    face_tracker.drop_timeout_face()
+    for (index,camera) in enumerate(cameras):
+        j = 0
+        for (i,rect) in enumerate(rects):
+            face = camera.faces[i]
+            if (face.get_name() == None):
+                face.set_name(recog_data[j])
+                camera.rets.append({"name":recog_data[j], "rect":rect})
+                j += 1
+        face_tracker[index].drop_timeout_face()
+        rets.append[camera.rets]
     return rets
   except Exception as e:
     print e
@@ -130,11 +142,14 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
             regRes.append(" ".encode("utf-8"))
     return regRes
 
-def detect_people(frame):
-    rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+def detect_people(frames):
     rets = []
-    for (i, rect) in enumerate(rects):
-        rets.append({"name":"", "rect":rect, "pos":"None"})
+    for frame in frames:
+        rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        ret_per_frame = []
+        for (i, rect) in enumerate(rects):
+            ret_per_frame.append({"name":"", "rect":rect, "pos":"None"})
+        rets.append(ret_per_frame)
     return rets
 
 person_imgs = {"Left" : [], "Right": [], "Center": []}
@@ -172,13 +187,16 @@ def train_finish(callback):
     t.start()
     return True
 
-def train_process_people(frame):
+def train_process_people(frames):
+    frame = frames[0]
     rects, landmarks = face_detect.detect_face(frame, 80);
+    ret_per_frame = []
     rets = []
     if (len(rects) == 1):
         aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
         person_imgs[face_pos].append(aligned_frame)
-        rets.append({"name":"", "rect":rects[0], "pos":face_pos})
+        ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
+    rets.append(ret_per_frame)
     return rets
 
 def delete_name(name):
