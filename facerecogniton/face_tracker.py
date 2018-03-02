@@ -1,5 +1,5 @@
 SCORE_MAX_COUNT = 4
-TRACE_PIXELS = 40
+TRACE_PIXELS = 20
 FRAME_KEEP_LIMIT = 10
 FACE_ID_MAX = 1000
 
@@ -11,7 +11,7 @@ class FaceWindow:
         self.frame_seq = frame_seq
         self.scores = []
         self.name = None
-        self.unknow_count = 1
+        self.unknow_count = 0
         self.phash = None
 
     def add_score(self, score):

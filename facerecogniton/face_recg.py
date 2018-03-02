@@ -62,16 +62,16 @@ def recog_process_frame(frames):
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
-        cameras[index].rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        cameras[index].rects, landmarks = face_detect.detect_face(frame,20);#min face size is set to 80x80
         face_tracker[index].increase_frame()
         for (i, rect) in enumerate(cameras[index].rects):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
-            if (face.get_name() == None and face.unknow_count % 4 != 0):
+            if (face.get_name() == None and face.unknow_count % 4 == 0):
                 cameras[index].aligns.append(aligned_face)
                 cameras[index].positions.append(face_pos)
-            elif (face.get_name() == None and face.unknow_count % 4 == 0):
+            elif (face.get_name() == None and face.unknow_count % 4 != 0):
                 cameras[index].rets.append({"name":" ", "rect":rect})
             else:
                 cameras[index].rets.append({"name":face.get_name(), "rect":rect})
@@ -156,7 +156,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
 def detect_people(frames):
     rets = []
     for frame in frames:
-        rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        rects, landmarks = face_detect.detect_face(frame,20);#min face size is set to 80x80
         ret_per_frame = []
         for (i, rect) in enumerate(rects):
             ret_per_frame.append({"name":"", "rect":rect, "pos":"None"})

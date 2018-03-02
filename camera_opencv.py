@@ -7,7 +7,7 @@ import time
 
 class Camera(BaseCamera):
     video_source = range(facerecg.CAMERA_NUMBER)
-    buffer_count = 10
+    buffer_count = 7
     reg_ret = []
 
     @staticmethod
@@ -47,7 +47,7 @@ class Camera(BaseCamera):
             images = []
             # read current frame
             current = time.time() * 1000
-            if current - last_time < 15:
+            if current - last_time < 10:
                 time.sleep(0.001)
                 continue
             last_time = current
