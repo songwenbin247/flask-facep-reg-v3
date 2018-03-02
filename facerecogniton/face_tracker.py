@@ -11,6 +11,7 @@ class FaceWindow:
         self.frame_seq = frame_seq
         self.scores = []
         self.name = None
+        self.unknow_count = 1
         self.phash = None
 
     def add_score(self, score):
@@ -24,6 +25,8 @@ class FaceWindow:
     def set_name(self, name):
         if name is not None and name != " ":
             self.name = name + str(self.face_id)
+        else:
+            self.unknow_count += 1
 
     def get_name(self):
         return self.name

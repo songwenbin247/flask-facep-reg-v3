@@ -10,7 +10,7 @@ CMD_TRAIN_FINISH  = 1
 CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
 
-CAMERA_NUMBER = 4
+CAMERA_NUMBER = 2
 
 Global.poscount = {"Left" : 0, "Right": 0, "Center": 0};
 class FaceRecognitonProcess(Process):

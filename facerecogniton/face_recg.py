@@ -68,9 +68,11 @@ def recog_process_frame(frames):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
-            if (face.get_name() == None):
+            if (face.get_name() == None and face.unknow_count % 4 != 0):
                 cameras[index].aligns.append(aligned_face)
                 cameras[index].positions.append(face_pos)
+            elif (face.get_name() == None and face.unknow_count % 4 == 0):
+                cameras[index].rets.append({"name":" ", "rect":rect})
             else:
                 cameras[index].rets.append({"name":face.get_name(), "rect":rect})
 
