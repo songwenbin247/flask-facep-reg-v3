@@ -3,7 +3,7 @@ from base_camera import BaseCamera
 import facerecogniton.facerecogniton as facerecg
 import Queue
 import numpy as np
-
+import time
 
 class Camera(BaseCamera):
     video_source = range(facerecg.CAMERA_NUMBER)
@@ -22,18 +22,16 @@ class Camera(BaseCamera):
     def frames():
         framequeue = []
         cameras = []
-#        for i in range(facerecg.CAMERA_NUMBER):
-#            cameras.append(cv2.VideoCapture(Camera.video_source[i]))
-#            if not cameras[i].isOpened():
-#                raise RuntimeError('Could not start camera. Index:' , i)
-        cameras.append(cv2.VideoCapture(0))
-        cameras.append(cv2.VideoCapture(1))
-        cameras.append(cv2.VideoCapture("rtsp://admin:a12345678@10.193.20.162/mpeg4/ch1/sub/av_stream"))
+        for i in range(facerecg.CAMERA_NUMBER):
+            cameras.append(cv2.VideoCapture(Camera.video_source[i]))
+            if not cameras[i].isOpened():
+                raise RuntimeError('Could not start camera. Index:' , i)
+            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
+            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+#        cameras.append(cv2.VideoCapture(0))
+#        cameras.append(cv2.VideoCapture(1))
+       # cameras.append(cv2.VideoCapture("rtsp://admin:a12345678@10.193.20.162/mpeg4/ch1/sub/av_stream"))
         framequeue = Queue.Queue(maxsize=Camera.buffer_count)
-
-        #camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        #camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        recg_ret = []
 
 
         for j in range(Camera.buffer_count - 1):
@@ -43,9 +41,17 @@ class Camera(BaseCamera):
                 images.append(img)
             framequeue.put(images)
 
+        last_time = 0
+        last_rets = []
         while True:
             images = []
             # read current frame
+            current = time.time() * 1000
+            if current - last_time < 50:
+                time.sleep(0.01)
+                continue
+            last_time = current
+
             for i in range(facerecg.CAMERA_NUMBER):
                 _, img = cameras[i].read()
                 images.append(img)
@@ -55,10 +61,12 @@ class Camera(BaseCamera):
             images = framequeue.get()
 
             rets = facerecg.getResult()
-            print rets
-            #if rets is not None:
+            if rets is None:
+                rets = last_rets
+            else:
+                last_rets = rets
+
             for (i, each) in  enumerate(rets):
-                print("index", i)
                 for ret in each:
                     #draw bounding box for the face
                     rect = ret['rect']
@@ -73,5 +81,9 @@ class Camera(BaseCamera):
             elif (len(images) == 3):
                 final1 = np.concatenate((images[0], images[1]), axis=1)
                 final2 = np.concatenate((images[2], images[2]), axis=1)
+                final = np.concatenate((final1, final2), axis=0)
+            elif (len(images) == 4):
+                final1 = np.concatenate((images[0], images[1]), axis=1)
+                final2 = np.concatenate((images[2], images[3]), axis=1)
                 final = np.concatenate((final1, final2), axis=0)
             yield cv2.imencode('.png', final)[1].tobytes()

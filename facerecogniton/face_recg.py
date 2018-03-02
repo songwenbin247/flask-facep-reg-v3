@@ -27,7 +27,7 @@ from face_tracker import *
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
-face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
+face_detect = MTCNNDetect(scale_factor=2); #scale_factor, rescales image for faster detection
 
 CAMERA_NUMBER = 4
 

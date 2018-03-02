@@ -10,7 +10,7 @@ CMD_TRAIN_FINISH  = 1
 CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
 
-CAMERA_NUMBER = 3
+CAMERA_NUMBER = 4
 
 Global.poscount = {"Left" : 0, "Right": 0, "Center": 0};
 class FaceRecognitonProcess(Process):
@@ -124,7 +124,7 @@ def getResult():
         rets= retq.get_nowait()
         return rets
     except Exception as e:
-        return []
+        return None
 
 def deleteName(name):
     cmdq.put((CMD_DELETE_NAME, name))
