@@ -9,6 +9,7 @@ CMD_TRAIN_START   = 0
 CMD_TRAIN_FINISH  = 1
 CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
+CMD_GET_NAMES = 4
 
 Global.poscount = {"Left" : 0, "Right": 0, "Center": 0};
 class FaceRecognitonProcess(Process):
@@ -60,6 +61,9 @@ class FaceRecognitonProcess(Process):
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)
+                    elif cmd == CMD_GET_NAMES:
+                        print("CMD_GET_NAMES")
+                        rets = face_recg.get_names()
                     self.cmdretq.put(rets)
                 elif self.frameq.full():
                     inFrame= self.reciveFrame()
@@ -130,6 +134,8 @@ def deleteName(name):
     return ret
 
 def getNames():
-    return ["gf"]
+    cmdq.put((CMD_GET_NAMES, None))
+    ret = cmdretq.get()
+    return ret
 
 initEngine()
