@@ -19,12 +19,10 @@ class FaceServerProtocol(WebSocketServerProtocol):
         super(FaceServerProtocol, self).__init__()
         self.new_person = None
 
-    def modulesUpdate(self, finish=False):
+    def modulesUpdate(self):
         names = facerecg.getNames()
         self.sendSocketMessage("LOADNAME_RESP", ",".join(names))
-        if finish:
-            self.sendSocketMessage("TRAINFINISH_RESP")
-            
+
     def onOpen(self):
         print "open"
 
@@ -35,9 +33,10 @@ class FaceServerProtocol(WebSocketServerProtocol):
         print "getTrainStatus"
         ret = facerecg.getTrainStatus()
         if ret:
-            reactor.callLater(0.3, self.getTrainStatus)
+            reactor.callLater(1, self.getTrainStatus)
         else:
             self.sendSocketMessage("TRAINFINISH_RESP")
+            self.modulesUpdate()
 
     def onMessage(self, payload, binary):
         raw = payload.decode('utf8')
@@ -52,17 +51,19 @@ class FaceServerProtocol(WebSocketServerProtocol):
             else:
                 self.sendSocketMessage("INITVIDEO")
         elif msg['type'] == "DELETENAME_REQ":
-            name = msg['msg'].encode('ascii', 'ignore')
+            name = msg['msg']
             ret = facerecg.deleteName(name)
             if (ret != True):
                 self.sendSocketMessage("ERROR_MSG", name + " is not in database")
+            else:
+                self.modulesUpdate()
         elif msg['type'] == "RECGFRAME_REQ":
             self.proWebFrame(msg['dataURL'])
             ret = facerecg.getResult()
             if ret is not None:
                 self.sendSocketMessage("RECGFRAME_RESP", ret)
         elif msg['type'] == "TRAINSTART_REQ":
-            name = msg['msg'].encode('ascii', 'ignore')
+            name = msg['msg']
             ret = facerecg.trainStart(name)
             if (ret != True):
                 self.sendSocketMessage("ERROR_MSG", name + " is already in database or training is not finished")
@@ -70,7 +71,7 @@ class FaceServerProtocol(WebSocketServerProtocol):
                 self.sendSocketMessage("TRAINSTART_RESP")
         elif msg['type'] == "TRAINFINISH_REQ":
             facerecg.trainFinish()
-            reactor.callLater(0.3, self.getTrainStatus)
+            reactor.callLater(1, self.getTrainStatus)
             print("TRAINFINISH_REQ ignore")
 
     def sendSocketMessage(self, mtype, msg = ""):

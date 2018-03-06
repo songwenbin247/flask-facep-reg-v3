@@ -23,6 +23,8 @@ from PIL import Image
 import StringIO
 import threading
 import ctypes
+import codecs
+
 
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
@@ -98,7 +100,7 @@ def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 95):
     return regRes
 
 
-def findPeople_Optee(features_arr, positions, thres = 0.6, percent_thres = 95):
+def findPeople_Optee(features_arr, positions, thres = 0.5, percent_thres = 95):
     '''
     :param features_arr: a list of 128d Features of all faces on screen
     :param positions: a list of face position types of all faces on screen
@@ -205,8 +207,8 @@ def delete_name_Optee(name):
 
 def delete_name_Python(name):
     if (feature_data_set is not None and name in feature_data_set):
-        del feature_data_set[name];
-        f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
+        del feature_data_set[name]
+        f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8')
         f.write(json.dumps(feature_data_set))
         f.close()
         return True
@@ -215,7 +217,7 @@ def delete_name_Python(name):
 
 def load_modules_Python():
     global feature_data_set
-    f = open('./models/facerec_128D.txt','r');
+    f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
     feature_data_set = json.loads(f.read());
     f.close()
 
@@ -231,7 +233,7 @@ def load_modules_Optee():
 findPeople = findPeople_Python
 load_modules = load_modules_Python
 delete_name = delete_name_Python
-save_feature = save_feature_Optee
+save_feature = save_feature_Python
 get_names = get_names_Python
 
 load_modules()
