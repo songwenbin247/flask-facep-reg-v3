@@ -21,6 +21,13 @@ class FaceRecognitonProcess(Process):
         self.cmdretq = cmdretq
         self.training = 0
 
+        self.soundmqtt = mqtt.Client()
+        self.soundmqtt.connect("localhost", 1883, 60)
+        self.soundmqtt.loop_start()
+
+    def sendGuidence(self, msg):
+        self.soundmqtt.publish("NXP_CMD_SOUND_GUIDE", msg)
+
     def sendResult(self, ret):
         self.retq.put_nowait(ret)
 
@@ -44,6 +51,7 @@ class FaceRecognitonProcess(Process):
                         if self.training == 0:
                             rets = face_recg.train_start(param)
                             self.training = 1
+                            self.sendGuidence("turn_face")
                         else:
                             rets = False
                     elif cmd == CMD_TRAIN_FINISH:
@@ -51,6 +59,7 @@ class FaceRecognitonProcess(Process):
                         if self.training == 1:
                             rets = face_recg.train_finish(self.training_callback)
                             self.training = 2
+                            self.sendGuidence("training")
                         else:
                             rets = False
                     elif cmd == CMD_TRAIN_STATUS:
@@ -58,6 +67,7 @@ class FaceRecognitonProcess(Process):
                             rets = False
                         else:
                             rets = True
+                            self.sendGuidence("train_over")
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)

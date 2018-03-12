@@ -79,7 +79,7 @@ This function basically does a simple linear search for
 ^the 128D vector with the min distance to the 128D vector of the face on screen
 '''
 
-def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 95):
+def findPeople_Python(features_arr, positions, thres = 0.5, percent_thres = 97):
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
         returnRes = " ";
@@ -100,7 +100,7 @@ def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 95):
     return regRes
 
 
-def findPeople_Optee(features_arr, positions, thres = 0.5, percent_thres = 95):
+def findPeople_Optee(features_arr, positions, thres = 0.5, percent_thres = 97):
     '''
     :param features_arr: a list of 128d Features of all faces on screen
     :param positions: a list of face position types of all faces on screen
