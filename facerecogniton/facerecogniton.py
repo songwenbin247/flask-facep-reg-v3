@@ -2,6 +2,7 @@ import json
 from multiprocessing import Process, Queue, Lock, Manager
 import threading, time
 import numpy as np
+import paho.mqtt.client as mqtt
 
 Global = Manager().Namespace()
 
@@ -20,10 +21,7 @@ class FaceRecognitonProcess(Process):
         self.cmdq = cmdq
         self.cmdretq = cmdretq
         self.training = 0
-
         self.soundmqtt = mqtt.Client()
-        self.soundmqtt.connect("localhost", 1883, 60)
-        self.soundmqtt.loop_start()
 
     def sendGuidence(self, msg):
         self.soundmqtt.publish("NXP_CMD_SOUND_GUIDE", msg)
@@ -39,6 +37,8 @@ class FaceRecognitonProcess(Process):
 
     def run(self):
         import face_recg as face_recg
+        self.soundmqtt.connect("localhost", 1883, 60)
+        self.soundmqtt.loop_start()
         
         print("Face recognition engine initialized")
         print("Please open browser and visite https://[board-ip]:5000/")
@@ -51,6 +51,7 @@ class FaceRecognitonProcess(Process):
                         if self.training == 0:
                             rets = face_recg.train_start(param)
                             self.training = 1
+                            print("Send turn face")
                             self.sendGuidence("turn_face")
                         else:
                             rets = False
@@ -65,9 +66,9 @@ class FaceRecognitonProcess(Process):
                     elif cmd == CMD_TRAIN_STATUS:
                         if self.training == 0:
                             rets = False
+                            self.sendGuidence("train_over")
                         else:
                             rets = True
-                            self.sendGuidence("train_over")
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)
