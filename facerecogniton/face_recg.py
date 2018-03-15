@@ -189,7 +189,7 @@ def train_finish(callback):
     return True
 
 def train_process_people(frame):
-    rects, landmarks = face_detect.detect_face(frame, 80);
+    rects, landmarks = face_detect.detect_face(frame, 40);
     rets = []
     if (len(rects) == 1):
         aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
