@@ -15,6 +15,7 @@ parser.add_argument('--socketport', type=int,
 args = parser.parse_args()
 
 print("Initialzing face recognition engine.")
+websocket.VIDEO_DEVICE = args.dev
 if args.dev == 'laptop':
     print("Using the camera of laptop.")
 elif args.dev == 'usb':
@@ -22,9 +23,11 @@ elif args.dev == 'usb':
     print("Using onboard usb camera")
 else:
     from camera_opencv import *
-    Camera.set_video_source(args.dev)
-    websocket.VIDEO_DEVICE = args.dev
-    print("Using ip camera with url(%s)" % args.dev)
+    video_source = []
+    for ip in args.dev.split(','):
+        video_source.append("rtsp://admin:a12345678@" + ip +":554/mpeg4/ch1/sub/av_stream")
+    Camera.set_video_source(video_source)
+    print("Using ip camera with url(s)", video_source)
 
 if args.httpport != None:
     HTTP_PORT = args.httpport

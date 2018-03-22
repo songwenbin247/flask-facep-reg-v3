@@ -7,15 +7,15 @@ import time,os
 import affinity
 
 class Camera(BaseCamera):
-    video_source = ["rtsp://admin:a12345678@10.193.20.81:554/mpeg4/ch1/sub/av_stream",
-                    "rtsp://admin:a12345678@10.193.20.157:554/mpeg4/ch1/sub/av_stream"]
-    #video_source = range(facerecg.CAMERA_NUMBER)
+    video_source = [0]
+    camera_number = 1
     buffer_count = 7
     reg_ret = []
 
     @staticmethod
     def set_video_source(source):
         Camera.video_source = source
+        Camera.camera_number = len(source)
 
     @staticmethod
     def set_buffer_count(count):
@@ -25,7 +25,7 @@ class Camera(BaseCamera):
     def frames():
         framequeue = []
         cameras = []
-        for i in range(facerecg.CAMERA_NUMBER):
+        for i in range(Camera.camera_number):
             cameras.append(cv2.VideoCapture(Camera.video_source[i]))
             if not cameras[i].isOpened():
                 raise RuntimeError('Could not start camera. Index:' , i)
@@ -39,7 +39,7 @@ class Camera(BaseCamera):
 
         for j in range(Camera.buffer_count - 1):
             images = []
-            for i in range(facerecg.CAMERA_NUMBER):
+            for i in range(Camera.camera_number):
                 _, img =  cameras[i].read()
                 images.append(img)
             framequeue.put(images)
@@ -49,8 +49,8 @@ class Camera(BaseCamera):
         videoWriter = []
 
         last_video = time.time() * 1000
-        for i in range(facerecg.CAMERA_NUMBER):
-            vw = cv2.VideoWriter("meida/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi', cv2.cv.CV_FOURCC(*'XVID'), 30, (352,288))
+        for i in range(Camera.camera_number):
+            vw = cv2.VideoWriter("media/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi', cv2.cv.CV_FOURCC(*'XVID'), 30, (352,288))
             videoWriter.append(vw)
 
         while True:
@@ -59,9 +59,9 @@ class Camera(BaseCamera):
             current = time.time() * 1000
 
             if current - last_video >= 1000 * 10:
-                for i in range(facerecg.CAMERA_NUMBER):
+                for i in range(Camera.camera_number):
                     videoWriter[i].release()
-                    videoWriter[i]=cv2.VideoWriter("meida/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi',cv2.cv.CV_FOURCC(*'XVID') , 30, (352,288))
+                    videoWriter[i]=cv2.VideoWriter("media/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi',cv2.cv.CV_FOURCC(*'XVID') , 30, (352,288))
                 last_video = current
 
 
@@ -70,7 +70,7 @@ class Camera(BaseCamera):
                 continue
             last_time = current
 
-            for i in range(facerecg.CAMERA_NUMBER):
+            for i in range(Camera.camera_number):
                 _, img = cameras[i].read()
                 images.append(img)
                 videoWriter[i].write(img)

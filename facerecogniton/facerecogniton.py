@@ -12,7 +12,6 @@ CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
 CMD_GET_NAMES = 4
 
-CAMERA_NUMBER = 2
 
 class FaceRecognitonProcess(Process):
     def __init__(self, frameq, retq, cmdq, cmdretq):
