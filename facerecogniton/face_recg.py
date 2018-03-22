@@ -23,17 +23,25 @@ from PIL import Image
 import StringIO
 import threading
 from face_tracker import *
+import ctypes
+import codecs
+
 
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
-face_detect = MTCNNDetect(scale_factor=2); #scale_factor, rescales image for faster detection
+face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
+feature_data_set = None
 
 CAMERA_NUMBER = 4
 
 face_tracker = []
 for i in range(CAMERA_NUMBER):
     face_tracker.append(FaceTracker())
+LIB = None
+FEATURE = ctypes.c_double *  128
+POS = ctypes.c_int
+NAME = ctypes.c_wchar_p
 
 '''
 Description:
@@ -54,7 +62,6 @@ class CameraRouad:
         self.rects = []
 
 def recog_process_frame(frames):
-  try:
     cameras = []
     rets = []
     aligns = []
@@ -68,11 +75,12 @@ def recog_process_frame(frames):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
-            if (face.get_name() == None and face.unknow_count % 4 == 0):
+            if (face.get_name() == None):
+#            if (face.get_name() == None and face.unknow_count % 2 == 0):
                 cameras[index].aligns.append(aligned_face)
                 cameras[index].positions.append(face_pos)
-            elif (face.get_name() == None and face.unknow_count % 4 != 0):
-                cameras[index].rets.append({"name":" ", "rect":rect})
+#            elif (face.get_name() == None and face.unknow_count % 2 != 0):
+#                cameras[index].rets.append({"name":" ", "rect":rect})
             else:
                 cameras[index].rets.append({"name":face.get_name(), "rect":rect})
 
@@ -91,15 +99,13 @@ def recog_process_frame(frames):
     for (index,camera) in enumerate(cameras):
         for (i,rect) in enumerate(camera.rects):
             face = camera.faces[i]
-            if (face.get_name() == None):
+            if (face.get_name() == None and face.unknow_count % 2 == 0):
                 face.set_name(recog_data[j])
                 camera.rets.append({"name":recog_data[j], "rect":rect})
                 j += 1
         face_tracker[index].drop_timeout_face()
         rets.append(camera.rets)
     return rets
-  except Exception as e:
-    print e
 
 '''
 facerec_128D.txt Data Structure:
@@ -113,19 +119,29 @@ facerec_128D.txt Data Structure:
 This function basically does a simple linear search for 
 ^the 128D vector with the min distance to the 128D vector of the face on screen
 '''
-import ctypes
-ll = ctypes.cdll.LoadLibrary
-lib = ll("./libfeature.so")
-lib.load_feature()
-lib.find_people.restype = ctypes.c_wchar_p
-lib.delete_name.restype = ctypes.c_int
 
-FEATURE = ctypes.c_double *  128
-POS = ctypes.c_int
-NAME = ctypes.c_wchar_p
+def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 97):
+    regRes = [];
+    for (i,features_128D) in enumerate(features_arr):
+        returnRes = " ";
+        smallest = sys.maxsize
+        for person in feature_data_set.keys():
+            person_data = feature_data_set[person][positions[i]];
+            for data in person_data:
+                distance = np.sqrt(np.sum(np.square(data-features_128D)))
+                if(distance < smallest):
+                    smallest = distance;
+                    returnRes = person;
+        percentage =  min(100, 100 * thres / smallest)
+        if percentage > percent_thres :
+            regRes.append(returnRes)
+            #regRes.append(returnRes+"-"+str(round(percentage,1))+"%")
+        else:
+            regRes.append(" ")
+    return regRes
 
 
-def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
+def findPeople_Optee(features_arr, positions, thres = 0.5, percent_thres = 97):
     '''
     :param features_arr: a list of 128d Features of all faces on screen
     :param positions: a list of face position types of all faces on screen
@@ -145,13 +161,14 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 95):
             cpos = 1
         elif (positions[i] == "Center"):
             cpos = 2
-        ret = lib.find_people(cinput1, cpos, ctypes.c_double(thres), ctypes.c_int(percent_thres))
+        ret = CLIB.find_people(cinput1, cpos, ctypes.c_double(thres), ctypes.c_int(percent_thres))
 
         if ret is not None:
             regRes.append(ret.encode("utf-8"))
         else:
             regRes.append(" ".encode("utf-8"))
     return regRes
+
 
 def detect_people(frames):
     rets = []
@@ -171,16 +188,20 @@ def train_start(name):
     person_imgs = {"Left" : [], "Right": [], "Center": []}
     return True
 
-def __training_thread_local(callback):
-    print("Start training")
-    person_features = {"Left" : [], "Right": [], "Center": []};
-    for pos in person_imgs:
-        person_features[pos] = [np.mean(extract_feature.get_features(
-                                         person_imgs[pos]),axis=0).tolist()]
+def get_names_Python():
+    names = []
+    for name in feature_data_set:
+        names.append(name)
+    return names
+
+def get_names_Optee():
+    return ["No"]
+
+def save_feature_Optee(name, person_features):
     right_input = FEATURE()
     left_input = FEATURE()
     front_input = FEATURE()
-    name = NAME(person_name)
+    cname = NAME(name)
     right_data = person_features["Right"][0];
     left_data = person_features["Left"][0];
     front_data = person_features["Center"][0];
@@ -189,7 +210,21 @@ def __training_thread_local(callback):
         right_input[index] = right_data[index]
         left_input[index] = left_data[index]
         front_input[index] = front_data[index]
-    lib.save_feature(name, right_input, left_input, front_input)
+    CLIB.save_feature(cname, right_input, left_input, front_input)
+
+def save_feature_Python(name, person_features):
+    feature_data_set[name] = person_features;
+    f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
+    f.write(json.dumps(feature_data_set))
+    f.close()
+
+def __training_thread_local(callback):
+    print("Start training")
+    person_features = {"Left" : [], "Right": [], "Center": []};
+    for pos in person_imgs:
+        person_features[pos] = [np.mean(extract_feature.get_features(
+                                         person_imgs[pos]),axis=0).tolist()]
+    save_feature(person_name, person_features)
     print("Stop training")
     callback()
 
@@ -200,7 +235,7 @@ def train_finish(callback):
 
 def train_process_people(frames):
     frame = frames[0]
-    rects, landmarks = face_detect.detect_face(frame, 80);
+    rects, landmarks = face_detect.detect_face(frame, 20);
     ret_per_frame = []
     rets = []
     if (len(rects) == 1):
@@ -210,10 +245,43 @@ def train_process_people(frames):
     rets.append(ret_per_frame)
     return rets
 
-def delete_name(name):
+def delete_name_Optee(name):
     cname = NAME(name)
-    ret = lib.delete_name(cname)
+    ret = CLIB.delete_name(cname)
     if ret == 1:
         return True
     else:
         return False
+
+def delete_name_Python(name):
+    if (feature_data_set is not None and name in feature_data_set):
+        del feature_data_set[name]
+        f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8')
+        f.write(json.dumps(feature_data_set))
+        f.close()
+        return True
+    else:
+        return False
+
+def load_modules_Python():
+    global feature_data_set
+    f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
+    feature_data_set = json.loads(f.read());
+    f.close()
+
+def load_modules_Optee():
+    global CLIB
+    ll = ctypes.cdll.LoadLibrary
+    CLIB = ll("./libfeature.so")
+    CLIB.load_feature()
+    CLIB.find_people.restype = ctypes.c_wchar_p
+    CLIB.delete_name.restype = ctypes.c_int
+
+
+findPeople = findPeople_Python
+load_modules = load_modules_Python
+delete_name = delete_name_Python
+save_feature = save_feature_Python
+get_names = get_names_Python
+
+load_modules()

@@ -3,10 +3,15 @@ from importlib import import_module
 import os,time
 from flask import Flask, render_template, Response
 import argparse
+import websocket
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dev', type=str, required=True,
                     help='[usb|laptop|"url" of IP camera]input video device')
+parser.add_argument('--httpport', type=int,
+                    help='The port for http server')
+parser.add_argument('--socketport', type=int,
+                    help='The port for websocket server')
 args = parser.parse_args()
 
 print("Initialzing face recognition engine.")
@@ -18,9 +23,28 @@ elif args.dev == 'usb':
 else:
     from camera_opencv import *
     Camera.set_video_source(args.dev)
+    websocket.VIDEO_DEVICE = args.dev
     print("Using ip camera with url(%s)" % args.dev)
+
+if args.httpport != None:
+    HTTP_PORT = args.httpport
+else:
+    HTTP_PORT = 5000
+
+if args.socketport != None:
+    websocket.WEBSOCKET_PORT = args.socketport
+else:
+    websocket.WEBSOCKET_PORT = 9000
     
-from websocket import startWebSocketServer
+import re
+def alter(old_file, new_file, old_str, new_str):
+    with open(old_file, "r") as f1,open(new_file, "w") as f2:
+        for line in f1:
+            f2.write(re.sub(old_str,new_str,line))
+    f1.close()
+    f2.close()
+
+alter("templates/index_static.html", "templates/index_web.html", "WEBSOCKET_PORT", str(websocket.WEBSOCKET_PORT))   
 
 fdir = os.path.dirname(os.path.realpath(__file__))
 tls_crt = os.path.join(fdir, 'tls', 'server.crt')
@@ -53,7 +77,7 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    startWebSocketServer(tls_key, tls_crt, args.dev)
+    websocket.startWebSocketServer(tls_key, tls_crt)
     #app.run(host='0.0.0.0', threaded=True)
-    app.run(host='0.0.0.0', threaded=True, ssl_context=(tls_crt, tls_key))
+    app.run(host='0.0.0.0', port=HTTP_PORT, threaded=True, ssl_context=(tls_crt, tls_key))
 

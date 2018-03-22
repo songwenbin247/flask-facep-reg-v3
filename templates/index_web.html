@@ -29,19 +29,19 @@ limitations under the License.
     <body>
         <div class="container">
             <div class="header" style="visibility:hidden;" id="cameradiv">
-                <video id="videocamera" width="1280" height="480" preload="auto"/>
+                <video id="videocamera" width="1280" height="960" preload="auto"/>
             </div>
             <div class="header" style="visibility:hidden;" id="videodiv">
-                <img src="{{ url_for('video_feed') }}" width="1280" height="960">
+                <img src="{{ url_for('video_feed') }}" width="1280" height="480">
             </div>
             <div class="header" style="visibility:hidden;" id="canvasdiv">
                 <canvas id="canvasoutput" width="800" height="600"/>
             </div>
-            <div class="content2">
+            <div class="content2" style="display:none;">
                 <h4>All Names:</h4>
                 <textarea style="resize:none" readonly id="identity" cols ="50" rows = "4"></textarea>
             </div>
-            <div class="content1">
+            <div class="content1" style="display:none;">
                 <h4>Input Your Name:
                     <input type="text" id="addPersonTxt" style="width:20%;border:1.5px solid #000">
                 </h4>
@@ -93,7 +93,7 @@ limitations under the License.
      var scale = canvas.width/video.width;
 
 
-     createSocket("wss://" + window.location.hostname + ":9000");
+     createSocket("wss://" + window.location.hostname + ":8000");
 
     </script>
 </html>

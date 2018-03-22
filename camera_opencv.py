@@ -3,10 +3,13 @@ from base_camera import BaseCamera
 import facerecogniton.facerecogniton as facerecg
 import Queue
 import numpy as np
-import time
+import time,os
+import affinity
 
 class Camera(BaseCamera):
-    video_source = range(facerecg.CAMERA_NUMBER)
+    video_source = ["rtsp://admin:a12345678@10.193.20.81:554/mpeg4/ch1/sub/av_stream",
+                    "rtsp://admin:a12345678@10.193.20.157:554/mpeg4/ch1/sub/av_stream"]
+    #video_source = range(facerecg.CAMERA_NUMBER)
     buffer_count = 7
     reg_ret = []
 
@@ -26,8 +29,8 @@ class Camera(BaseCamera):
             cameras.append(cv2.VideoCapture(Camera.video_source[i]))
             if not cameras[i].isOpened():
                 raise RuntimeError('Could not start camera. Index:' , i)
-            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
-            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+#            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
+#            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
 #        cameras.append(cv2.VideoCapture(0))
 #        cameras.append(cv2.VideoCapture(1))
        # cameras.append(cv2.VideoCapture("rtsp://admin:a12345678@10.193.20.162/mpeg4/ch1/sub/av_stream"))
@@ -43,11 +46,26 @@ class Camera(BaseCamera):
 
         last_time = 0
         last_rets = []
+        videoWriter = []
+
+        last_video = time.time() * 1000
+        for i in range(facerecg.CAMERA_NUMBER):
+            vw = cv2.VideoWriter("meida/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi', cv2.cv.CV_FOURCC(*'XVID'), 30, (352,288))
+            videoWriter.append(vw)
+
         while True:
             images = []
             # read current frame
             current = time.time() * 1000
-            if current - last_time < 10:
+
+            if current - last_video >= 1000 * 10:
+                for i in range(facerecg.CAMERA_NUMBER):
+                    videoWriter[i].release()
+                    videoWriter[i]=cv2.VideoWriter("meida/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi',cv2.cv.CV_FOURCC(*'XVID') , 30, (352,288))
+                last_video = current
+
+
+            if current - last_time < 30:
                 time.sleep(0.001)
                 continue
             last_time = current
@@ -55,6 +73,7 @@ class Camera(BaseCamera):
             for i in range(facerecg.CAMERA_NUMBER):
                 _, img = cameras[i].read()
                 images.append(img)
+                videoWriter[i].write(img)
 
             facerecg.proCvFrame(images)
             framequeue.put(images)

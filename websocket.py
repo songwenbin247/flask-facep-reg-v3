@@ -12,19 +12,18 @@ import time, StringIO, base64, os
 from PIL import Image
 import threading
 
-video_device = ""
+VIDEO_DEVICE = ""
+WEBSOCKET_PORT = 9000
  
 class FaceServerProtocol(WebSocketServerProtocol):
     def __init__(self):
         super(FaceServerProtocol, self).__init__()
         self.new_person = None
 
-    def modulesUpdate(self, finish=False):
+    def modulesUpdate(self):
         names = facerecg.getNames()
         self.sendSocketMessage("LOADNAME_RESP", ",".join(names))
-        if finish:
-            self.sendSocketMessage("TRAINFINISH_RESP")
-            
+
     def onOpen(self):
         print "open"
 
@@ -34,10 +33,14 @@ class FaceServerProtocol(WebSocketServerProtocol):
     def getTrainStatus(self):
         print "getTrainStatus"
         ret = facerecg.getTrainStatus()
-        if ret:
-            reactor.callLater(0.3, self.getTrainStatus)
+        if ret[0] == 1:
+            reactor.callLater(0.5, self.getTrainStatus)
+            self.sendSocketMessage("TRAINPROCESS", ret[1])
+        elif ret[0] == 2:
+            reactor.callLater(0.5, self.getTrainStatus)
         else:
             self.sendSocketMessage("TRAINFINISH_RESP")
+            self.modulesUpdate()
 
     def onMessage(self, payload, binary):
         raw = payload.decode('utf8')
@@ -47,30 +50,32 @@ class FaceServerProtocol(WebSocketServerProtocol):
         elif msg['type'] == "LOADNAME_REQ":
             names = facerecg.getNames()
             self.sendSocketMessage("LOADNAME_RESP", ",".join(names))
-            if video_device == "laptop":
+            if VIDEO_DEVICE == "laptop":
                 self.sendSocketMessage("INITCAMERA")
             else:
                 self.sendSocketMessage("INITVIDEO")
         elif msg['type'] == "DELETENAME_REQ":
-            name = msg['msg'].encode('ascii', 'ignore')
+            name = msg['msg']
             ret = facerecg.deleteName(name)
             if (ret != True):
                 self.sendSocketMessage("ERROR_MSG", name + " is not in database")
+            else:
+                self.modulesUpdate()
         elif msg['type'] == "RECGFRAME_REQ":
             self.proWebFrame(msg['dataURL'])
             ret = facerecg.getResult()
             if ret is not None:
                 self.sendSocketMessage("RECGFRAME_RESP", ret)
         elif msg['type'] == "TRAINSTART_REQ":
-            name = msg['msg'].encode('ascii', 'ignore')
+            name = msg['msg']
             ret = facerecg.trainStart(name)
             if (ret != True):
                 self.sendSocketMessage("ERROR_MSG", name + " is already in database or training is not finished")
             else:
                 self.sendSocketMessage("TRAINSTART_RESP")
+                reactor.callLater(0.5, self.getTrainStatus)
         elif msg['type'] == "TRAINFINISH_REQ":
             facerecg.trainFinish()
-            reactor.callLater(0.3, self.getTrainStatus)
             print("TRAINFINISH_REQ ignore")
 
     def sendSocketMessage(self, mtype, msg = ""):
@@ -93,12 +98,10 @@ def startSocketServer():
     factory = WebSocketServerFactory()
     factory.protocol = FaceServerProtocol
     ctx_factory = DefaultOpenSSLContextFactory(tls_key, tls_crt)
-    reactor.listenSSL(9000, factory, ctx_factory)
+    reactor.listenSSL(WEBSOCKET_PORT, factory, ctx_factory)
     reactor.run()
 
-def startWebSocketServer(tls_key, tls_crt, dev):
-    global video_device
-    video_device = dev
+def startWebSocketServer(tls_key, tls_crt):
     p2 = Process(target = startSocketServer)
     p2.start()
 

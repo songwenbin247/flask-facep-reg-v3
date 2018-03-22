@@ -153,7 +153,6 @@ function sendMessage(type, msg) {
     socket.send(JSON.stringify(msg));
 }
 
-var training = 0;
 var left,right,center;
 function createSocket(address) {
     var numConnect = 0;
@@ -185,29 +184,9 @@ function createSocket(address) {
             redrawPeople(j['msg']);
         } else if (j.type == "RECGFRAME_RESP") {
             recgRet = j['msg'];
-            console.log(training);
-            if (training == 1) {
-                var pos = recgRet[0]["pos"];
-                if (pos == "Left")
-                    left += 1;
-                else if (pos == "Right")
-                    right += 1;
-                else
-                    center += 1;
-                setProcessBards(left, right, center)
-                if (right >= 15 && left >= 15 &&  center >= 15) {
-                    hideProcessBars();
-                    showProcessImg();
-                    $("#trainingStatus").html("Training.");
-                    training = 0;
-                    sendMessage("TRAINFINISH_REQ", "");
-                }
-            }
-
         } else if (j.type == "TRAINSTART_RESP") {
             $("#trainingStatus").html("Recoding.");
             showProcessBars();
-            training = 1;
             left = right = center = 0;
         } else if (j.type == "TRAINFINISH_RESP") {
             hideProcessImg();
@@ -215,6 +194,14 @@ function createSocket(address) {
         } else if (j.type == "ERROR_MSG") {
             alert(j['msg']);
         } else if (j.type == "TRAINPROCESS") {
+            setProcessBards(j['msg']['Left'], j['msg']['Right'], j['msg']['Center'])
+            if (j['msg']['Left'] >= 15 && j['msg']['Right'] >= 15 &&  j['msg']['Center'] >= 15) {
+                hideProcessBars();
+                showProcessImg();
+                $("#trainingStatus").html("Training.");
+                sendMessage("TRAINFINISH_REQ", "");
+            }
+
         } else {
             console.log("Unrecognized message type: " + j.type);
         }
