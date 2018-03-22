@@ -58,7 +58,7 @@ class Camera(BaseCamera):
             # read current frame
             current = time.time() * 1000
 
-            if current - last_video >= 1000 * 10:
+            if current - last_video >= 1000 * 60 * 10:
                 for i in range(Camera.camera_number):
                     videoWriter[i].release()
                     videoWriter[i]=cv2.VideoWriter("media/" + time.strftime('%m-%d.%H:%M_') + str(i) +'.avi',cv2.cv.CV_FOURCC(*'XVID') , 30, (352,288))

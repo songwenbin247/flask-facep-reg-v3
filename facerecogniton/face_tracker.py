@@ -24,7 +24,7 @@ class FaceWindow:
 
     def set_name(self, name):
         if name is not None and name != " ":
-            self.name = name + str(self.face_id)
+            self.name = name
 
     def get_name(self):
         return self.name

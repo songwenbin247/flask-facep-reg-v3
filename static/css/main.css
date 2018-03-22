@@ -37,7 +37,7 @@ img {
 
 .container .header {
     text-align: center;
-    top: 0;
+    top: 20;
     bottom: 330px;
     position: absolute;
     right: 0;

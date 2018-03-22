@@ -2,7 +2,8 @@ import json
 from multiprocessing import Process, Queue, Lock, Manager
 import threading, time
 import numpy as np
-import affinity
+import paho.mqtt.client as mqtt
+
 
 Global = Manager().Namespace()
 
@@ -11,6 +12,7 @@ CMD_TRAIN_FINISH  = 1
 CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
 CMD_GET_NAMES = 4
+CMD_MODULE_UPDATE = 5
 
 
 class FaceRecognitonProcess(Process):
@@ -21,9 +23,10 @@ class FaceRecognitonProcess(Process):
         self.cmdq = cmdq
         self.cmdretq = cmdretq
         self.training = 0
-
-    def sendGuidence(self, msg):
-        self.soundmqtt.publish("NXP_CMD_SOUND_GUIDE", msg)
+        self.broadmqtt = mqtt.Client()
+        self.broadmqtt.connect("localhost", 1883, 60)
+        self.broadmqtt.subscribe("NXP_CMD_MODULE_UPDATE", qos=1)
+        self.broadmqtt.on_message = self.module_update
 
     def sendResult(self, ret):
         try:
@@ -46,9 +49,13 @@ class FaceRecognitonProcess(Process):
     def training_callback(self):
         self.training = 0
 
+    def module_update(self, client, userdata, message):
+        print "in module_update"
+        self.cmdq.put((CMD_MODULE_UPDATE, None))
+
     def run(self):
         import face_recg as face_recg
-        print(self.pid)
+        self.broadmqtt.loop_start()
         
         print("Face recognition engine initialized")
         print("Please open browser and visite https://[board-ip]:5000/")
@@ -74,7 +81,7 @@ class FaceRecognitonProcess(Process):
                     elif cmd == CMD_TRAIN_STATUS:
                         if self.training == 0:
                             rets = (0, None)
-                            self.sendGuidence("train_over")
+                            self.broadmqtt.publish("NXP_CMD_MODULE_UPDATE", "nouse")
                         elif self.training == 1:
                             rets = (1, self.poscount)
                         else:
@@ -82,6 +89,11 @@ class FaceRecognitonProcess(Process):
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)
+                        if rets = True:
+                            self.broadmqtt.publish("NXP_CMD_MODULE_UPDATE", "nouse")
+                    elif cmd == CMD_MODULE_UPDATE:
+                        face_recg.load_modules()
+                        continue
                     elif cmd == CMD_GET_NAMES:
                         print("CMD_GET_NAMES")
                         rets = face_recg.get_names()
@@ -94,11 +106,12 @@ class FaceRecognitonProcess(Process):
                         continue
                     if self.training == 1:
                         rets = face_recg.train_process_people(inFrame)
-                        if len(rets) == 1 and rets[0]["pos"] == "Center":
+                        print rets
+                        if len(rets[0]) == 1 and rets[0][0]["pos"] == "Center":
                              self.poscount["Center"] += 1
-                        elif len(rets) == 1 and rets[0]["pos"] == "Left":
+                        elif len(rets[0]) == 1 and rets[0][0]["pos"] == "Left":
                              self.poscount["Left"] += 1
-                        elif len(rets) == 1 and rets[0]["pos"] == "Right":
+                        elif len(rets[0]) == 1 and rets[0][0]["pos"] == "Right":
                              self.poscount["Right"] += 1
                     elif self.training == 0:
                         rets = face_recg.recog_process_frame(inFrame)

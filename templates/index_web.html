@@ -37,11 +37,11 @@ limitations under the License.
             <div class="header" style="visibility:hidden;" id="canvasdiv">
                 <canvas id="canvasoutput" width="800" height="600"/>
             </div>
-            <div class="content2" style="display:none;">
+            <div class="content2">
                 <h4>All Names:</h4>
                 <textarea style="resize:none" readonly id="identity" cols ="50" rows = "4"></textarea>
             </div>
-            <div class="content1" style="display:none;">
+            <div class="content1">
                 <h4>Input Your Name:
                     <input type="text" id="addPersonTxt" style="width:20%;border:1.5px solid #000">
                 </h4>
@@ -93,7 +93,7 @@ limitations under the License.
      var scale = canvas.width/video.width;
 
 
-     createSocket("wss://" + window.location.hostname + ":7050");
+     createSocket("wss://" + window.location.hostname + ":5050");
 
     </script>
 </html>
