@@ -89,7 +89,7 @@ class FaceRecognitonProcess(Process):
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)
-                        if rets = True:
+                        if rets == True:
                             self.broadmqtt.publish("NXP_CMD_MODULE_UPDATE", "nouse")
                     elif cmd == CMD_MODULE_UPDATE:
                         face_recg.load_modules()
