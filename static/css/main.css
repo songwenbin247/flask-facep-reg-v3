@@ -22,7 +22,7 @@ h1, .h1, h2, .h2, h3, .h3, {
 
 @media (min-width: 1200px) {
   .container {
-    width: 970px;
+    width: 1200px;
   }
 }
 
@@ -46,12 +46,12 @@ img {
     margin-right: auto;
     margin-bottom: 10px;
     width: 1280px;
-    height: 500px;
+    height: 600px;
     /* overflow-y: scroll; */
 }
 
 .container .content1 {
-    top: 530px;
+    top: 650px;
     bottom: 0;
     position: absolute;
     right: 0;
@@ -64,7 +64,7 @@ img {
 }
 
 .container .content2 {
-    top: 530px;
+    top: 650px;
     bottom: 0;
     position: absolute;
     right: 0;

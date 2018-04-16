@@ -141,8 +141,8 @@ def initEngine():
 
 def proImageFile(imgf):
     frame = np.array(imgf)
-    proCvFrame(frame)
-
+    proCvFrame([frame])
+`
 def proCvFrame(frame):
     try:
         if (frameq.full()):

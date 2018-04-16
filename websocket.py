@@ -65,7 +65,7 @@ class FaceServerProtocol(WebSocketServerProtocol):
             self.proWebFrame(msg['dataURL'])
             ret = facerecg.getResult()
             if ret is not None:
-                self.sendSocketMessage("RECGFRAME_RESP", ret)
+                self.sendSocketMessage("RECGFRAME_RESP", ret[0])
         elif msg['type'] == "TRAINSTART_REQ":
             name = msg['msg']
             ret = facerecg.trainStart(name)
