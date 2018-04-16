@@ -4,7 +4,6 @@ import facerecogniton.facerecogniton as facerecg
 import Queue
 import numpy as np
 import time,os
-import affinity
 
 class Camera(BaseCamera):
     video_source = [0]
