@@ -30,7 +30,7 @@ limitations under the License.
     <body>
         <div class="container">
             <div class="header" style="visibility:hidden;" id="cameradiv">
-                <video id="videocamera" width="1280" height="960" preload="auto"/>
+                <video id="videocamera" width="800" height="600" preload="auto"/>
             </div>
             <div class="header" style="visibility:hidden;" id="videodiv">
                 <img src="{{ url_for('video_feed') }}" width="1280" height="480">
@@ -63,7 +63,7 @@ limitations under the License.
                     </h4>
                  </div>
                 <div style="display:none;" id="processimg">
-                    <h4>Traing on Cloud
+                    <h4>Traing on LS1046ARDB
                          <img src="{{url_for('static', filename='images/loading.gif')}}"/>
                     </h4>
                 </div>
@@ -94,7 +94,7 @@ limitations under the License.
      var scale = canvas.width/video.width;
 
 
-     createSocket("wss://" + window.location.hostname + ":5050");
+     createSocket("wss://" + window.location.hostname + ":9000");
 
     </script>
 </html>

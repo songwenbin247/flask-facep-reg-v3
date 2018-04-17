@@ -227,7 +227,7 @@ function initCamera() {
          alert(error);
      };
 
-    var vConstraints = { video: { width: 800, height: 600 }};
+    var vConstraints = { video: { width: {min:800}, height: {min:600} }};
 
      // Put video listeners into place
      if(navigator.getUserMedia) { // Standard

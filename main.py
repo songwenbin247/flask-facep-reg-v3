@@ -24,8 +24,9 @@ elif args.dev == 'usb':
 else:
     from camera_opencv import *
     video_source = []
-    for ip in args.dev.split(','):
-        video_source.append("rtsp://admin:a12345678@" + ip +":554/mpeg4/ch1/sub/av_stream")
+    for url in args.dev.split(','):
+        video_source.append(url)
+        #video_source.append("rtsp://admin:a12345678@" + ip +":554/mpeg4/ch1/sub/av_stream")
     Camera.set_video_source(video_source)
     print("Using ip camera with url(s)", video_source)
 
