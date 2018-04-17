@@ -149,7 +149,7 @@ def proCvFrame(frame):
             frameq.get_nowait()
         frameq.put(frame)
     except Exception as e:
-        print(e)
+        pass
 
 def trainStart(name):
     cmdq.put((CMD_TRAIN_START, name))
