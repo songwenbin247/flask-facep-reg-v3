@@ -12,6 +12,8 @@ parser.add_argument('--httpport', type=int,
                     help='The port for http server')
 parser.add_argument('--socketport', type=int,
                     help='The port for websocket server')
+parser.add_argument('--svr', type=str,
+                    help='The ip for training server')
 args = parser.parse_args()
 
 print("Initialzing face recognition engine.")
@@ -24,9 +26,8 @@ elif args.dev == 'usb':
 else:
     from camera_opencv import *
     video_source = []
-    for url in args.dev.split(','):
-        video_source.append(url)
-        #video_source.append("rtsp://admin:a12345678@" + ip +":554/mpeg4/ch1/sub/av_stream")
+    for ip in args.dev.split(','):
+        video_source.append("rtsp://admin:a12345678@" + ip +":554/mpeg4/ch1/sub/av_stream")
     Camera.set_video_source(video_source)
     print("Using ip camera with url(s)", video_source)
 
@@ -39,16 +40,23 @@ if args.socketport != None:
     websocket.WEBSOCKET_PORT = args.socketport
 else:
     websocket.WEBSOCKET_PORT = 9000
+
+serverip = args.svr
     
 import re
-def alter(old_file, new_file, old_str, new_str):
+def alter(old_file, new_file, old_strs, new_strs):
     with open(old_file, "r") as f1,open(new_file, "w") as f2:
         for line in f1:
-            f2.write(re.sub(old_str,new_str,line))
+            for i,old_str in enumerate(old_strs):
+                line = re.sub(old_strs[i],new_strs[i],line)
+            f2.write(line)
     f1.close()
     f2.close()
 
-alter("templates/index_static.html", "templates/index_web.html", "WEBSOCKET_PORT", str(websocket.WEBSOCKET_PORT))   
+if serverip is None:
+    alter("templates/index_static.html", "templates/index_web.html", ["WEBSOCKET_PORT"], [str(websocket.WEBSOCKET_PORT)])
+else:
+    alter("templates/index_static.html", "templates/index_web.html", ["WEBSOCKET_PORT","LS1046ARDB"], [str(websocket.WEBSOCKET_PORT), serverip])
 
 fdir = os.path.dirname(os.path.realpath(__file__))
 tls_crt = os.path.join(fdir, 'tls', 'server.crt')
@@ -81,7 +89,7 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    websocket.startWebSocketServer(tls_key, tls_crt)
+    websocket.startWebSocketServer(serverip)
     #app.run(host='0.0.0.0', threaded=True)
     app.run(host='0.0.0.0', port=HTTP_PORT, threaded=True, ssl_context=(tls_crt, tls_key))
 

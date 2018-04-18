@@ -199,7 +199,7 @@ function createSocket(address) {
                 hideProcessBars();
                 showProcessImg();
                 $("#trainingStatus").html("Training.");
-                sendMessage("TRAINFINISH_REQ", "");
+                sendMessage("RECODFINISH_REQ", "");
             }
 
         } else {

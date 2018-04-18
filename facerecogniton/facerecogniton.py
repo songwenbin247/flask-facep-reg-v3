@@ -8,25 +8,24 @@ import paho.mqtt.client as mqtt
 Global = Manager().Namespace()
 
 CMD_TRAIN_START   = 0
-CMD_TRAIN_FINISH  = 1
+CMD_RECOD_FINISH = 1
 CMD_TRAIN_STATUS = 2
 CMD_DELETE_NAME = 3
 CMD_GET_NAMES = 4
 CMD_MODULE_UPDATE = 5
-
+CMD_TRAIN_FINISH  = 6
 
 class FaceRecognitonProcess(Process):
-    def __init__(self, frameq, retq, cmdq, cmdretq):
+    def __init__(self, frameq, retq, cmdq, cmdretq, serverip = None):
         Process.__init__(self)
         self.frameq = frameq
         self.retq = retq
         self.cmdq = cmdq
         self.cmdretq = cmdretq
         self.training = 0
-        self.broadmqtt = mqtt.Client()
-        self.broadmqtt.connect("localhost", 1883, 60)
-        self.broadmqtt.subscribe("NXP_CMD_MODULE_UPDATE", qos=1)
-        self.broadmqtt.on_message = self.module_update
+        self.training_name = ""
+
+        self.serverip = serverip
 
     def sendResult(self, ret):
         try:
@@ -47,15 +46,13 @@ class FaceRecognitonProcess(Process):
             return None
 
     def training_callback(self):
-        self.training = 0
-
-    def module_update(self, client, userdata, message):
-        print "in module_update"
-        self.cmdq.put((CMD_MODULE_UPDATE, None))
+        if self.serverip is None:
+            self.training = 0
+            self.training_name = ""
 
     def run(self):
         import face_recg as face_recg
-        self.broadmqtt.loop_start()
+        face_recg.init_engine(self.serverip)
         
         print("Face recognition engine initialized")
         print("Please open browser and visite https://[board-ip]:5000/")
@@ -68,32 +65,37 @@ class FaceRecognitonProcess(Process):
                         if self.training == 0:
                             rets = face_recg.train_start(param)
                             self.training = 1
+                            self.training_name = param
                             self.poscount = {"Left" : 0, "Right": 0, "Center": 0}
                         else:
                             rets = False
-                    elif cmd == CMD_TRAIN_FINISH:
-                        print("CMD_TRAIN_FINISH")
+                    elif cmd == CMD_RECOD_FINISH:
+                        print("CMD_RECOD_FINISH")
                         if self.training == 1:
-                            rets = face_recg.train_finish(self.training_callback)
+                            rets = face_recg.recod_finish(self.training_callback)
                             self.training = 2
                         else:
                             rets = False
                     elif cmd == CMD_TRAIN_STATUS:
                         if self.training == 0:
+                            #Not training or training finished
                             rets = (0, None)
-                            self.broadmqtt.publish("NXP_CMD_MODULE_UPDATE", "nouse")
                         elif self.training == 1:
+                            #Recoding frames
                             rets = (1, self.poscount)
-                        else:
+                        elif self.training == 2:
+                            #Training
                             rets = (2, None)
                     elif cmd == CMD_DELETE_NAME:
                         print("CMD_DELETE_NAME")
                         rets = face_recg.delete_name(param)
-                        if rets == True:
-                            self.broadmqtt.publish("NXP_CMD_MODULE_UPDATE", "nouse")
                     elif cmd == CMD_MODULE_UPDATE:
+                        print("CMD_MODULE_UPDATE")
                         face_recg.load_modules()
-                        continue
+                        rets = face_recg.get_names()
+                        if self.training_name == param and self.training == 2:
+                            self.training = 0
+                            self.training_name = ""
                     elif cmd == CMD_GET_NAMES:
                         print("CMD_GET_NAMES")
                         rets = face_recg.get_names()
@@ -106,7 +108,6 @@ class FaceRecognitonProcess(Process):
                         continue
                     if self.training == 1:
                         rets = face_recg.train_process_people(inFrame)
-                        print rets
                         if len(rets[0]) == 1 and rets[0][0]["pos"] == "Center":
                              self.poscount["Center"] += 1
                         elif len(rets[0]) == 1 and rets[0][0]["pos"] == "Left":
@@ -126,9 +127,7 @@ retq = None
 cmdq = None
 cmdretq = None
 
-
-
-def initEngine():
+def initEngine(serverip):
     global frameq,retq, cmdq,cmdretq
     
     frameq = Queue(maxsize = 1)
@@ -136,7 +135,7 @@ def initEngine():
     cmdq = Queue(maxsize = 1)
     cmdretq = Queue(maxsize = 1)
 
-    process = FaceRecognitonProcess(frameq, retq, cmdq, cmdretq)
+    process = FaceRecognitonProcess(frameq, retq, cmdq, cmdretq, serverip)
     process.start()
 
 def proImageFile(imgf):
@@ -149,7 +148,7 @@ def proCvFrame(frame):
             frameq.get_nowait()
         frameq.put(frame)
     except Exception as e:
-        pass
+        print(e)
 
 def trainStart(name):
     cmdq.put((CMD_TRAIN_START, name))
@@ -161,8 +160,18 @@ def getTrainStatus():
     ret = cmdretq.get()
     return ret
 
-def trainFinish():
-    cmdq.put((CMD_TRAIN_FINISH, None))
+def trainFinish(name):
+    cmdq.put((CMD_TRAIN_FINISH, name))
+    ret = cmdretq.get()
+    return ret
+
+def recodFinish():
+    cmdq.put((CMD_RECOD_FINISH, None))
+    ret = cmdretq.get()
+    return ret
+
+def moduleUpdate(name):
+    cmdq.put((CMD_MODULE_UPDATE, name))
     ret = cmdretq.get()
     return ret
 
@@ -183,4 +192,3 @@ def getNames():
     ret = cmdretq.get()
     return ret
 
-initEngine()

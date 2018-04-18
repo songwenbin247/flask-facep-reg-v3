@@ -23,8 +23,8 @@ from PIL import Image
 import StringIO
 import threading
 from face_tracker import *
-import ctypes
 import codecs
+import requests
 
 
 #FRGraph = FaceRecGraph();
@@ -38,10 +38,6 @@ CAMERA_NUMBER = 4
 face_tracker = []
 for i in range(CAMERA_NUMBER):
     face_tracker.append(FaceTracker())
-LIB = None
-FEATURE = ctypes.c_double *  128
-POS = ctypes.c_int
-NAME = ctypes.c_wchar_p
 
 '''
 Description:
@@ -75,7 +71,8 @@ def recog_process_frame(frames):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
-            if (face.get_name() == None):
+            if (1):
+#            if (face.get_name() == None):
 #            if (face.get_name() == None and face.unknow_count % 2 == 0):
                 cameras[index].aligns.append(aligned_face)
                 cameras[index].positions.append(face_pos)
@@ -99,7 +96,8 @@ def recog_process_frame(frames):
     for (index,camera) in enumerate(cameras):
         for (i,rect) in enumerate(camera.rects):
             face = camera.faces[i]
-            if (face.get_name() == None and face.unknow_count % 2 == 0):
+            if (1):
+            #if (face.get_name() == None and face.unknow_count % 2 == 0):
                 face.set_name(recog_data[j])
                 camera.rets.append({"name":recog_data[j], "rect":rect})
                 j += 1
@@ -120,7 +118,7 @@ This function basically does a simple linear search for
 ^the 128D vector with the min distance to the 128D vector of the face on screen
 '''
 
-def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 97):
+def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
         returnRes = " ";
@@ -141,35 +139,6 @@ def findPeople_Python(features_arr, positions, thres = 0.6, percent_thres = 97):
     return regRes
 
 
-def findPeople_Optee(features_arr, positions, thres = 0.5, percent_thres = 97):
-    '''
-    :param features_arr: a list of 128d Features of all faces on screen
-    :param positions: a list of face position types of all faces on screen
-    :param thres: distance threshold
-    :return: person name and percentage
-    '''
-    regRes = [];
-    for (i,features_128D) in enumerate(features_arr):
-        cinput1 = FEATURE()
-        cpos = POS()
-        for tmp in range(128):
-            cinput1[tmp] = features_128D[tmp]
-
-        if (positions[i] == "Right"):
-            cpos = 0
-        elif (positions[i] == "Left"):
-            cpos = 1
-        elif (positions[i] == "Center"):
-            cpos = 2
-        ret = CLIB.find_people(cinput1, cpos, ctypes.c_double(thres), ctypes.c_int(percent_thres))
-
-        if ret is not None:
-            regRes.append(ret.encode("utf-8"))
-        else:
-            regRes.append(" ".encode("utf-8"))
-    return regRes
-
-
 def detect_people(frames):
     rets = []
     for frame in frames:
@@ -182,54 +151,101 @@ def detect_people(frames):
 
 person_imgs = {"Left" : [], "Right": [], "Center": []}
 person_name = ""
-def train_start(name):
-    global person_imgs,person_name
+def train_start_Local(name):
+    global person_imgs,person_name,orgin_imgs
     person_name = name
     person_imgs = {"Left" : [], "Right": [], "Center": []}
+    orgin_imgs = []
     return True
 
-def get_names_Python():
+def train_start_Server(name):
+    global person_imgs,person_name
+    args = {'id': name}
+    headers = {"Content-type":"application/json","Accept": "application/json"}
+    r = requests.put(url, params=args, headers=headers)
+    ret = json.loads(r.text)
+    if ('state'in ret and ret['state'] == 'SUCCESS'):
+        person_name = name
+        person_imgs = {"Left" : [], "Right": [], "Center": []}
+        orgin_imgs = []
+        return True
+    else:
+        return False
+
+def train_finish_Local(name):
+    global person_imgs,person_name
+    person_name = ""
+    person_imgs = {"Left" : [], "Right": [], "Center": []}
+    return True, get_names()
+
+def train_finish_Server(name):
+    global person_imgs,person_name
+    print("train_finish_Server")
+    if person_name == name:
+        person_name = ""
+        person_imgs = {"Left" : [], "Right": [], "Center": []}
+        isme = True
+    else:
+        isme = False
+    load_modules_Server()
+    return isme, get_names() 
+
+def get_names():
+    print("get_names")
     names = []
     for name in feature_data_set:
         names.append(name)
     return names
 
-def get_names_Optee():
-    return ["No"]
-
-def save_feature_Optee(name, person_features):
-    right_input = FEATURE()
-    left_input = FEATURE()
-    front_input = FEATURE()
-    cname = NAME(name)
-    right_data = person_features["Right"][0];
-    left_data = person_features["Left"][0];
-    front_data = person_features["Center"][0];
-
-    for index in range(128):
-        right_input[index] = right_data[index]
-        left_input[index] = left_data[index]
-        front_input[index] = front_data[index]
-    CLIB.save_feature(cname, right_input, left_input, front_input)
-
-def save_feature_Python(name, person_features):
+def save_feature_Local(name, person_features):
     feature_data_set[name] = person_features;
     f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
     f.write(json.dumps(feature_data_set))
     f.close()
 
 def __training_thread_local(callback):
-    print("Start training")
+    print("__training_thread_local")
     person_features = {"Left" : [], "Right": [], "Center": []};
     for pos in person_imgs:
         person_features[pos] = [np.mean(extract_feature.get_features(
                                          person_imgs[pos]),axis=0).tolist()]
-    save_feature(person_name, person_features)
+    save_feature_Local(person_name, person_features)
     print("Stop training")
     callback()
 
-def train_finish(callback):
+def recod_finish_Local(callback):
+    print "recod_finish_Local"
     t = threading.Thread(target=__training_thread_local, args=(callback,))
+    t.start()
+    return True
+
+def __training_thread_server(callback):
+    print "__training_thread"
+    files = {}
+
+    for pos in ["Center", "Left", "Right"]:
+        for i,frame in enumerate(person_imgs[pos]):
+            picf = StringIO.StringIO()
+            pi = Image.fromarray(frame)
+            pi.save(picf, format = "jpeg")
+            picf.seek(0)
+            files['file{}{}'.format(pos,i)] = ('{}{}.jpeg'.format(pos,i), picf, 'image/jpeg')
+
+    args = {'id': person_name, 'end':'true'}
+    headers = {"Content-type":"application/json","Accept": "application/json"}
+
+    while(1):
+        r = requests.post(url, params=args, files=files)
+        ret = json.loads(r.text)
+        if ('state' in ret and ret['state'] != 'FAILED'):
+            print("break loop")
+            break
+
+    callback()
+
+def recod_finish_Server(callback):
+    print "recod_finish_Server"
+    t = threading.Thread(target=__training_thread_server, args=(callback,))
     t.start()
     return True
 
@@ -240,20 +256,25 @@ def train_process_people(frames):
     rets = []
     if (len(rects) == 1):
         aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
-        person_imgs[face_pos].append(aligned_frame)
+        if (len(person_imgs[face_pos]) < 15):
+            person_imgs[face_pos].append(aligned_frame)
         ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
     rets.append(ret_per_frame)
     return rets
 
-def delete_name_Optee(name):
-    cname = NAME(name)
-    ret = CLIB.delete_name(cname)
-    if ret == 1:
+def delete_name_Server(name):
+    if (feature_data_set is None or name not in feature_data_set):
+        return False
+    args = {'id': name}
+    headers = {"Content-type":"application/json","Accept": "application/json"}
+    r = requests.delete(url, params=args, headers=headers)
+    ret = json.loads(r.text)
+    if ('state'in ret and ret['state'] == 'SUCCESS'):
         return True
     else:
         return False
 
-def delete_name_Python(name):
+def delete_name_Local(name):
     if (feature_data_set is not None and name in feature_data_set):
         del feature_data_set[name]
         f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8')
@@ -263,25 +284,45 @@ def delete_name_Python(name):
     else:
         return False
 
-def load_modules_Python():
+def load_modules_Server():
+    print "Downloading modules from cloud."
+    global feature_data_set, info_data_set
+    headers = {"Content-type":"application/json","Accept": "application/json"}
+    r = requests.get(url, headers=headers)
+    if (r.status_code == 200):
+        f = open('./models/facerec_128D.txt','w')
+        f.write(r.content)
+        f.close()
+        feature_data_set = json.loads(r.content)
+
+        return True
+    else:
+        print "Modules updated failed"
+        return False
+
+def load_modules_Local():
     global feature_data_set
     f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
     feature_data_set = json.loads(f.read());
     f.close()
 
-def load_modules_Optee():
-    global CLIB
-    ll = ctypes.cdll.LoadLibrary
-    CLIB = ll("./libfeature.so")
-    CLIB.load_feature()
-    CLIB.find_people.restype = ctypes.c_wchar_p
-    CLIB.delete_name.restype = ctypes.c_int
+load_modules = load_modules_Local
+delete_name = delete_name_Local
+train_start = train_start_Local
+recod_finish = recod_finish_Local
+train_finish = train_finish_Local
+url = ''
 
+def init_engine(serverip):
+    global load_modules,delete_name,train_start,train_finish,recod_finish,url
+    if (serverip == None):
+        pass
+    else:
+        url  = 'http://{}:8383/train'.format(serverip)
+        load_modules = load_modules_Server
+        delete_name = delete_name_Server
+        train_start = train_start_Server
+        recod_finish = recod_finish_Server
+        train_finish = train_finish_Server
 
-findPeople = findPeople_Python
-load_modules = load_modules_Python
-delete_name = delete_name_Python
-save_feature = save_feature_Python
-get_names = get_names_Python
-
-load_modules()
+    load_modules()
