@@ -122,19 +122,12 @@ class FaceRecognitonProcess(Process):
 #            except Exception as e:
 #                pass
 
-frameq = None
-retq = None
-cmdq = None
-cmdretq = None
+frameq = Queue(maxsize = 1)
+retq = Queue(maxsize = 1)
+cmdq = Queue(maxsize = 1)
+cmdretq = Queue(maxsize = 1)
 
 def initEngine(serverip):
-    global frameq,retq, cmdq,cmdretq
-    
-    frameq = Queue(maxsize = 1)
-    retq = Queue(maxsize = 1)
-    cmdq = Queue(maxsize = 1)
-    cmdretq = Queue(maxsize = 1)
-
     process = FaceRecognitonProcess(frameq, retq, cmdq, cmdretq, serverip)
     process.start()
 
@@ -148,7 +141,7 @@ def proCvFrame(frame):
             frameq.get_nowait()
         frameq.put(frame)
     except Exception as e:
-        print(e)
+        pass
 
 def trainStart(name):
     cmdq.put((CMD_TRAIN_START, name))
