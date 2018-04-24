@@ -53,7 +53,7 @@ class FaceRecognitonProcess(Process):
     def run(self):
         import face_recg as face_recg
         face_recg.init_engine(self.serverip)
-        
+
         print("Face recognition engine initialized")
         print("Please open browser and visite https://[board-ip]:5000/")
         while (1):
@@ -114,6 +114,7 @@ class FaceRecognitonProcess(Process):
                              self.poscount["Left"] += 1
                         elif len(rets[0]) == 1 and rets[0][0]["pos"] == "Right":
                              self.poscount["Right"] += 1
+                        print('left=%d, center=%d, right=%d' %(self.poscount["Left"], self.poscount["Center"], self.poscount["Right"]))
                     elif self.training == 0:
                         rets = face_recg.recog_process_frame(inFrame)
                     else:
