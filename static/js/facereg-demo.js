@@ -185,7 +185,7 @@ function createSocket(address) {
         } else if (j.type == "RECGFRAME_RESP") {
             recgRet = j['msg'];
         } else if (j.type == "TRAINSTART_RESP") {
-            $("#trainingStatus").html("Recoding.");
+            $("#trainingStatus").html("Recording.");
             showProcessBars();
             left = right = center = 0;
         } else if (j.type == "TRAINFINISH_RESP") {
@@ -195,7 +195,7 @@ function createSocket(address) {
             alert(j['msg']);
         } else if (j.type == "TRAINPROCESS") {
             setProcessBards(j['msg']['Left'], j['msg']['Right'], j['msg']['Center'])
-            if (j['msg']['Left'] >= 15 && j['msg']['Right'] >= 15 &&  j['msg']['Center'] >= 15) {
+            if (j['msg']['Left'] >= 20 && j['msg']['Right'] >= 20 &&  j['msg']['Center'] >= 20) {
                 hideProcessBars();
                 showProcessImg();
                 $("#trainingStatus").html("Training.");
