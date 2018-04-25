@@ -40,12 +40,13 @@ face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for fas
 feature_data_set = dict()
 
 ## Inter-subject and Intra-subject mean and variance
-mean_intra = 0
-var_intra  = 0
+mean_intra = 0.5
+var_intra  = 0.01
 N_intra = 0
-mean_inter = 0
-var_inter  = 0
-N_inter = 0;
+mean_inter = 1.5
+var_inter  = 0.01
+N_inter = 0
+guas_th = 0
 
 LOF_model = None
 KNN_model = None
@@ -173,19 +174,20 @@ def train_LOF():
         for pos in ['Left','Center', 'Right']:
             personal_data = feature_data_set[id ][pos];
             personal_samples = personal_samples + len(personal_data)
-            if (len(vec) == 0):
-                vec = personal_data
-            else:
-                vec = np.concatenate((vec, personal_data), axis=0)
+            if(len(personal_data) > 0):
+                if (len(vec) == 0):
+                    vec = np.array(personal_data)
+                else:
+                    vec = np.concatenate((vec, np.array(personal_data)), axis=0)
 
         for i in range(personal_samples):
             labels = np.append(labels, id)
 
 
     print('vecs=%d, labels=%d' %(len(vec), len(labels)))
-    LOF_model = LocalOutlierFactor(n_neighbors=10)
-    LOF_model = LOF_model.fit(vec, labels)
-    KNN_model = neighbors.KNeighborsClassifier(3, weights='uniform')
+    #LOF_model = LocalOutlierFactor(n_neighbors=20)
+    #LOF_model = LOF_model.fit(vec, labels)
+    KNN_model = neighbors.KNeighborsClassifier(7, weights='uniform')
     KNN_model = KNN_model.fit(vec, labels)
 
     vec_global = vec
@@ -213,6 +215,8 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
         #print(KNN_model.predict_proba([features_128D]))
         (dist, ind) = KNN_model.kneighbors([features_128D], n_neighbors=1, return_distance=True)
 
+        knn_label = KNN_model.predict([features_128D])
+        #print(knn_label)
         #print('N1_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
         #print('N1_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
@@ -221,12 +225,12 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
             th = -1000
         else:
             x = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
-            th = (-2)*np.log(5000 * np.sqrt(var_intra/var_inter))
+            th = (-2)*np.log(1000 * np.sqrt(var_intra/var_inter))
 
 
         #if (x < th) and (pred==1):
-        if (x < th):
-            returnRes = labels_global[ind[0][0]]
+        if (x < th) and (labels_global[ind[0][0]]==knn_label[0]):
+            returnRes = knn_label[0]
         #percentage =  min(100, 100 * thres / smallest)
         #if percentage > percent_thres :
             regRes.append(returnRes)
@@ -235,7 +239,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
             regRes.append("Unknown")
 
 
-    print('ret=[%s], knn=%f, x=%f, th=%f, pred=%s' %(regRes, dist, x, th, pred))
+    print('ret=[%s], knn=%f, gaus_th=%f,  x=%f, th=%f, pred=%s' %(regRes, dist, guas_th, x, th, labels_global[ind[0][0]] ))
     return regRes
 
 
@@ -243,18 +247,19 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
 
 
 def estimate_feature_dist():
-    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
+    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, gaus_th
 
     for i in range(len(feature_data_set.keys())):
         vec= np.array([])
         # estimate intra-subject distribution
         for pos in ['Left','Center', 'Right']:
             id = feature_data_set.keys()[i];
-            personal_data = feature_data_set[id ][pos];
-            if (len(vec) == 0):
-                vec = personal_data
-            else:
-                vec = np.concatenate((vec, personal_data), axis=0)
+            personal_data = feature_data_set[id][pos];
+            if(len(personal_data) > 0):
+                if (len(vec) == 0):
+                    vec = np.array(personal_data)
+                else:
+                    vec = np.concatenate((vec, np.array(personal_data)), axis=0)
 
         for v1 in range(len(vec)):
             for v2 in range(v1+1, len(vec)):
@@ -277,10 +282,12 @@ def estimate_feature_dist():
             for pos in ['Left','Center', 'Right']:
                 id = feature_data_set.keys()[j];
                 personal_data = feature_data_set[id ][pos];
-                if (len(vec2) == 0):
-                    vec2 = personal_data
-                else:
-                    vec2 = np.concatenate((vec2, personal_data), axis=0)
+
+                if(len(personal_data) > 0):
+                    if (len(vec2) == 0):
+                        vec2 = personal_data
+                    else:
+                        vec2 = np.concatenate((vec2, personal_data), axis=0)
 
 
             for v1 in vec:
@@ -297,14 +304,14 @@ def estimate_feature_dist():
 
                     #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
 
-    th = (-2)*np.log(5000.0 * np.sqrt(var_intra/var_inter))
+    th = (-2)*np.log(2000.0 * np.sqrt(var_intra/var_inter))
 
     a = var_inter - var_intra
     b = -2*(mean_intra * var_inter - mean_inter*var_intra)
     c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
-    x1= (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+    guas_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
     x2= (-b- np.sqrt(b*b-4*a*c))/(2*a)
-    print('a=%f, b=%f, c=%f, x1=%f, x2=%f' %(a,b,c,x1,x2))
+    print('a=%f, b=%f, c=%f, x1=%f, x2=%f' %(a,b,c,guas_th,x2))
     print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
     print('TH=%f' %(th))
@@ -370,7 +377,7 @@ def get_names():
             names.append(name)
     return names
 
-def update_feature_dist(personal_features):
+def update_feature_dist(name, personal_features):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
 
     vec= np.array([])
@@ -398,8 +405,12 @@ def update_feature_dist(personal_features):
     #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
     for v1 in vec:
-        for v2 in vec_global:
+        for id, v2 in enumerate(vec_global):
             d = np.sqrt(np.sum(np.square(v1 - v2) ))
+
+            if name == labels_global[id]:
+                continue
+
             #print('id=%s, d=%1.4f' %(id, d))
 
             mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
@@ -429,7 +440,7 @@ def update_feature_dist(personal_features):
 def save_feature_Local(name, person_features):
 
     #update estimate using existing dataset
-    update_feature_dist(person_features);
+    update_feature_dist(name, person_features);
 
     feature_data_set[name] = person_features;
 
@@ -479,7 +490,6 @@ def __training_thread_server(callback):
         r = requests.post(url, params=args, files=files)
         ret = json.loads(r.text)
         if ('state' in ret and ret['state'] != 'FAILED'):
-            print("break loop")
             break
 
     callback()
@@ -544,11 +554,13 @@ def load_modules_Server():
 def load_modules_Local():
     global feature_data_set
     f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
+
     str = f.read()
     if(len(str) != 0):
         feature_data_set = json.loads(str);
         estimate_feature_dist();
         train_LOF();
+
     f.close()
 
 load_modules = load_modules_Local
