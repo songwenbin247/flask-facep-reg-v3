@@ -46,10 +46,13 @@ N_intra = 0
 mean_inter = 1.5
 var_inter  = 0.01
 N_inter = 0
-guas_th = 0
+gaus_th = 0
+gaus_pdf_ratio = 2000
+
 
 LOF_model = None
 KNN_model = None
+KNN_neighbors = 11
 vec_global = None
 labels_global=None
 CAMERA_NUMBER = 4
@@ -159,7 +162,7 @@ This function basically does a simple linear search for
 '''
 
 def train_LOF():
-    global LOF_model, KNN_model
+    global LOF_model, KNN_model, KNN_neighbors
     global vec_global, labels_global
 
     labels = np.array([])
@@ -187,7 +190,7 @@ def train_LOF():
     print('vecs=%d, labels=%d' %(len(vec), len(labels)))
     #LOF_model = LocalOutlierFactor(n_neighbors=20)
     #LOF_model = LOF_model.fit(vec, labels)
-    KNN_model = neighbors.KNeighborsClassifier(7, weights='uniform')
+    KNN_model = neighbors.KNeighborsClassifier(KNN_neighbors, weights='uniform')
     KNN_model = KNN_model.fit(vec, labels)
 
     vec_global = vec
@@ -197,6 +200,7 @@ def train_LOF():
 
 def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
+    global gaus_th, gaus_th0
 
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
@@ -225,7 +229,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
             th = -1000
         else:
             x = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
-            th = (-2)*np.log(1000 * np.sqrt(var_intra/var_inter))
+            th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
 
 
         #if (x < th) and (pred==1):
@@ -239,7 +243,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
             regRes.append("Unknown")
 
 
-    print('ret=[%s], knn=%f, gaus_th=%f,  x=%f, th=%f, pred=%s' %(regRes, dist, guas_th, x, th, labels_global[ind[0][0]] ))
+    print('ret=[%s], nn_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]] ))
     return regRes
 
 
@@ -247,7 +251,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
 
 
 def estimate_feature_dist():
-    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, gaus_th
+    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, gaus_th, gaus_th0, gaus_pdf_ratio
 
     for i in range(len(feature_data_set.keys())):
         vec= np.array([])
@@ -304,14 +308,16 @@ def estimate_feature_dist():
 
                     #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
 
-    th = (-2)*np.log(2000.0 * np.sqrt(var_intra/var_inter))
-
+    th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
     b = -2*(mean_intra * var_inter - mean_inter*var_intra)
     c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
-    guas_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-    x2= (-b- np.sqrt(b*b-4*a*c))/(2*a)
-    print('a=%f, b=%f, c=%f, x1=%f, x2=%f' %(a,b,c,guas_th,x2))
+    gaus_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+    th = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
+    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
+    gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+
+    print('a=%f, b=%f, c=%f, root=%f, gaus_th0=%f' %(a,b,c,gaus_th, gaus_th0))
     print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
     print('TH=%f' %(th))
@@ -425,13 +431,12 @@ def update_feature_dist(name, personal_features):
     print('[new] N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('[new[ N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
-    th = (-2)*np.log(100.0 * np.sqrt(var_intra/var_inter))
+    th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
     b = -2*(mean_intra * var_inter - mean_inter*var_intra)
     c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
-    x1= (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-    x2= (-b- np.sqrt(b*b-4*a*c))/(2*a)
-    print('a=%f, b=%f, c=%f, x1=%f, x2=%f' %(a,b,c,x1,x2))
+    gaus_th= (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+    print('a=%f, b=%f, c=%f, root=%f' %(a,b,c,gaus_th))
     print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
     print('TH=%f' %(th))
