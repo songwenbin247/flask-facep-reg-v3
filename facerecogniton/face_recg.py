@@ -49,6 +49,18 @@ N_inter = 0
 gaus_th = 0
 gaus_pdf_ratio = 2000
 
+#perfmon variables
+total_cnt = 0
+false_pos_cnt = 0
+false_neg_cnt = 0
+
+# Face annealing parameters
+cur_state    = 0
+cur_time     = 0
+cur_location = 0
+cur_face  = None
+
+
 
 LOF_model = None
 KNN_model = None
@@ -96,6 +108,7 @@ class CameraRouad:
     def __init__(self):
         self.aligns = []
         self.positions = []
+
         self.faces = []
         self.rets = []
         self.rects = []
@@ -105,6 +118,7 @@ def recog_process_frame(frames):
     rets = []
     aligns = []
     positions = []
+    face_locations = []
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
@@ -127,13 +141,19 @@ def recog_process_frame(frames):
     for c in cameras:
         aligns += c.aligns
         positions += c.positions
+        if(len(face_locations)==0):
+            face_locations = np.array(c.rects)
+        else:
+            face_locations = np.concatenate((face_locations, np.array(c.rects)), axis=0)
+
     if (len(aligns) == 0):
         for (index,camera) in enumerate(cameras):
             rets.append(camera.rets)
         return rets
 
     features_arr = extract_feature.get_features(aligns)
-    recog_data = findPeople(features_arr,positions);
+    recog_data = findPeople(face_locations, features_arr, positions);
+
 
     j = 0
     for (index,camera) in enumerate(cameras):
@@ -198,9 +218,11 @@ def train_LOF():
 
 
 
-def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
+def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_th, gaus_th0
+    global cur_face, cur_location, cur_state
+    global total_cnt, false_pos_cnt, false_neg_cnt
 
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
@@ -232,9 +254,57 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
             th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
 
 
+        total_cnt +=1
+
         #if (x < th) and (pred==1):
         if (x < th) and (labels_global[ind[0][0]]==knn_label[0]):
-            returnRes = knn_label[0]
+            #face filtering
+            if (cur_face == None):
+                #subject not present before, stricter detection rule applies
+                if (dist < (mean_intra - np.sqrt(var_intra))):
+                    #this face is 1st time recognized, reset after idle time of 1min?
+                    cur_face = knn_label[0]
+                    cur_state = 0
+                    cur_location = face_locations[0]
+                    returnRes = knn_label[0]
+                    false_pos_cnt += 1
+                else:
+                    regRes.append("Unknown ")
+
+                #cur_state += 1
+                #if (cur_state == 3):
+                #    cur_face = knn_label[0]
+                #    cur_state = 0
+                #    cur_location = face_locations[0]
+
+                #    returnRes = knn_label[0]
+                #else:
+                #    regRes.append(" ")
+            else:
+                d = np.sqrt(np.sum(np.square(face_locations[0] - cur_location) ))
+                d0 = 0.1 * np.sqrt(640*640 + 480*480)
+                if(knn_label[0] != cur_face) and (d<d0):
+                    cur_state += 1
+                    if (cur_state == 3):
+                        cur_face = knn_label[0]
+                        cur_state = 0
+                        cur_location = face_locations[0]
+
+                        returnRes = knn_label[0]
+                    else:
+                        print('[Abnorma]cur_state=%d, detected face=%s' %(cur_state, knn_label[0]))
+                        regRes.append(" ")
+
+                else:
+                    if cur_state>0:
+                        print('[Reset] cur_state=%d, detected face=%s' %(cur_state, knn_label[0]))
+                    cur_face = knn_label[0]
+                    cur_state = 0
+                    cur_location = face_locations[0]
+
+                    returnRes = knn_label[0]
+
+            #returnRes = knn_label[0]
         #percentage =  min(100, 100 * thres / smallest)
         #if percentage > percent_thres :
             regRes.append(returnRes)
@@ -242,8 +312,15 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
         else:
             regRes.append("Unknown")
 
+    if (returnRes != "xiaomin") and (returnRes != "Unknown"):
+        false_neg_cnt += 1
 
-    print('ret=[%s], nn_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]] ))
+    if total_cnt == 500:
+        print('total_cnt:%d, false_neg:%d' %(total_cnt, false_neg_cnt))
+
+    print('ret=[%s], cnt=%d, n_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, total_cnt, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]]))
+
+    #print('ret=[%s], nn_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]]))
     return regRes
 
 
@@ -455,6 +532,9 @@ def save_feature_Local(name, person_features):
     f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
     f.write(json.dumps(feature_data_set))
 
+    #update perfmon
+    total_cnt = 0
+    false_neg_cnt = 0
 
     f.close()
 
