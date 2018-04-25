@@ -5,6 +5,18 @@ import Queue
 import numpy as np
 import time,os
 
+def rotate(image, angle, center=None, scale=1.0):
+    (h, w) = image.shape[:2]
+
+    if center is None:
+        center = (w / 2, h / 2)
+
+    M = cv2.getRotationMatrix2D(center, angle, scale)
+    rotated = cv2.warpAffine(image, M, (w, h))
+
+    return rotated
+
+
 class Camera(BaseCamera):
     video_source = [0]
     camera_number = 1
@@ -55,6 +67,8 @@ class Camera(BaseCamera):
 
             for i in range(Camera.camera_number):
                 _, img = cameras[i].read()
+                #after = rotate(img, -90)
+                #images.append(after)
                 images.append(img)
 
             facerecg.proCvFrame(images)

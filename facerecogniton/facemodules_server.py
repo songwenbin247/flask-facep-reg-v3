@@ -30,7 +30,6 @@ face_detect = MTCNNDetect(scale_factor=2); #scale_factor, rescales image for fas
 feature_data_set = {}
 person_images = {}
 
-
 def training_start(name):
     global person_images,feature_data_set
     if (name in feature_data_set or name in person_images):
@@ -43,6 +42,31 @@ def training_proframe(name, aligned_frame, pos):
     global person_images,feature_data_set
     person_images[name][pos].append(aligned_frame)
     return True
+
+def training_proframe_detect(name, frame):
+    print "training_proframe_detect", name
+    rects, landmarks = face_detect.detect_face(frame, 20);
+    print rects,landmarks
+    if (len(rects) == 1):
+        aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
+        person_images[name][face_pos].append(aligned_frame)
+    return True
+
+def get_train_status(name):
+    if (name in feature_data_set):
+        return "FINISHED"
+    elif (name in person_images):
+        return "TRAINING"
+    else:
+        return "NOEXIS"
+
+def get_images_num(name):
+    print "get_images_num", name
+    if (name not in person_images):
+        return {'l':0, 'r':0, 'c':0}
+    else:
+        return {'l':len(person_images[name]["Left"]), 'r':len(person_images[name]["Right"]),
+                'c':len(person_images[name]["Center"])}
 
 def __training_thread(name, callback):
     print "__training_thread"

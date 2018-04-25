@@ -87,9 +87,62 @@ class TrainModels(Resource):
             print "return false"
             return {'state':'FAILED'}, 201
 
+
+class TrainModelsWX(Resource):
+    def __send_train_finish(self, name):
+        print "__send_train_finish"
+        mqttclient.publish("NXP_CMD_MODULE_UPDATE", name)
+
+    def __send_delete_name(self, name):
+        print "__send_delete_name"
+        mqttclient.publish("NXP_CMD_MODULE_UPDATE", name)
+
+    def get(self):
+        print "=======start======="
+        args = parser.parse_args()
+        print args
+        name = args['id'].decode('utf-8')
+        print "=======end======="
+        state = facemodules.get_train_status(name)
+        return {'state': state}, 200
+
+    def put(self):
+        name = request.form['id'].decode('utf-8')
+        print name,request.form
+        ret = facemodules.training_start(name)
+        if ret == False:
+            print "already in"
+            return {'state':'EXIST'}, 201
+        return {'state':'SUCCESS'}, 201
+
+    def post(self):
+        try:
+            print request.form
+            name = request.form['id'].decode('utf-8')
+            img_num = facemodules.get_images_num(name)
+            if(img_num['l'] >= 15 and img_num['r'] >= 15 and img_num['c'] >= 15):
+                raise Exception()
+
+            pif=StringIO.StringIO()
+            request.files['file'].save(pif)
+            pif.seek(0)
+            pili = Image.open(pif)
+            frame = np.array(pili)
+
+            facemodules.training_proframe_detect(name, frame)
+            img_num = facemodules.get_images_num(name)
+            if(img_num['l'] >= 15 and img_num['r'] >= 15 and img_num['c'] >= 15):
+                facemodules.training_finish(name, self.__send_train_finish)
+        except Exception as e:
+            pass
+
+        print img_num
+        return img_num, 201
+
 ##
 ## Actually setup the Api resource routing here
 ##
 api.add_resource(TrainModels, '/train')
+api.add_resource(TrainModelsWX, '/trainwx')
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8383, debug=False)
