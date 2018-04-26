@@ -33,6 +33,8 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn import neighbors, datasets
 import ntpath
 
+from face_meta import *
+
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
@@ -57,13 +59,7 @@ total_cnt = 0
 false_pos_cnt = 0
 false_neg_cnt = 0
 
-# Face annealing parameters
-cur_state    = 0
-cur_time     = 0
-cur_location = 0
-cur_face  = None
-
-
+personal_meta = dict()
 
 LOF_model = None
 KNN_model = None
@@ -224,8 +220,8 @@ def train_LOF():
 def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_th, gaus_th0, gaus_rhs
-    global cur_face, cur_location, cur_state
     global total_cnt, false_pos_cnt, false_neg_cnt, alpha
+    global personal_meta
 
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
@@ -259,63 +255,66 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 
         total_cnt +=1
 
-        #if (x < th) and (pred==1):
         if (gaus_lhs < gaus_rhs) and (knn1_label==knn_label):
             #face filtering
-            if (cur_face == None):
-                #subject not present before, stricter detection rule applies
-                if (dist < (mean_intra - alpha*np.sqrt(var_intra))):
-                    #this face is 1st time recognized, reset after idle time of 1min?
-                    cur_face = knn_label
-                    cur_state = 0
-                    cur_location = face_locations[0]
-                    false_pos_cnt += 1
-                    returnRes = knn_label
-                else:
-                    returnRes = "Unknown"
-                    #regRes.append("Unknown")
+            meta = personal_meta[knn_label]
 
-            else:
-                d = np.sqrt(np.sum(np.square(face_locations[0] - cur_location) ))
-                d0 = 0.1 * np.sqrt(640*640 + 480*480)
-                if(knn_label != cur_face) and (d<d0):
-                    cur_state += 1
-                    if (cur_state == 3):
-                        cur_face = knn_label
-                        cur_state = 0
-                        cur_location = face_locations[0]
+            if (meta.detected == 0):
+                #subject not present before, stricter detection rule applies
+
+                if (dist < (meta.mean - 1.0*np.sqrt(meta.var))):
+                #if (dist < (ra - alpha*np.sqrt(var_intra))):
+                    #this face is 1st time recognized, reset after idle time of 1min?
+
+                    meta.cur_state += 1
+                    if(meta.cur_state == 1):
+                        print('initial detection: dist=%f, th=%f' %(dist, meta.mean - np.sqrt(meta.var)))
+                        meta.detected = 1
+                        meta.cur_state = 0
+                        meta.cur_location = face_locations[0]
 
                         returnRes = knn_label
                     else:
-                        print('[Abnorma]cur_state=%d, detected face=%s' %(cur_state, knn_label))
-                        returnRes = " "
-                        #regRes.append(" ")
+                        print('initial detect, state=%d' %(meta.cur_state))
+                        returnRes = "Unknown"
 
                 else:
-                    if cur_state>0:
-                        print('[Reset] cur_state=%d, detected face=%s' %(cur_state, knn_label))
-                    cur_face = knn_label
-                    cur_state = 0
-                    cur_location = face_locations[0]
+                    print('initial detect, state=%d, dist=%f, th=%f, reset' %(meta.cur_state, dist, meta.mean - 1.0*np.sqrt(meta.var)))
+                    meta.cur_state = 0
+                    returnRes = "Unknown"
 
+            else:
+                # the subject has been identified
+
+                d = np.sqrt(np.sum(np.square(face_locations[0] - meta.cur_location) ))
+                d0 = 0.2 * np.sqrt(640*640 + 480*480)
+
+                if (d<d0):
+                    if meta.cur_state>0:
+                        print('[Reset] cur_state=%d, detected face=%s' %(meta.cur_state, knn_label))
+
+                    meta.cur_state = 0
+                    meta.cur_location = face_locations[0]
                     returnRes = knn_label
 
-            #returnRes = knn_label[0]
-        #percentage =  min(100, 100 * thres / smallest)
-        #if percentage > percent_thres :
+                else:
+                    meta.cur_state += 1
+                    meta.cur_location = face_locations[0]
+
+                    if (meta.cur_state == 3):
+                        meta.cur_state = 0
+                        returnRes = knn_label
+                    else:
+                        print('[Abnorma]cur_state=%d, detected face=%s' %(meta.cur_state, knn_label))
+                        returnRes = " "
+
             regRes.append(returnRes)
-            #regRes.append(returnRes+"-"+str(round(percentage,1))+"%")
         else:
             regRes.append("Unknown")
 
-    if (returnRes != "xiaomin") and (returnRes != "Unknown"):
-        false_neg_cnt += 1
 
-    if total_cnt == 500:
-        print('total_cnt:%d, false_neg:%d' %(total_cnt, false_neg_cnt))
-
-    print('ret=[%s], cnt=%d, cur_face=%s, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
-            %(regRes, total_cnt, cur_face, dist,
+    print('ret=[%s], cnt=%d, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
+            %(regRes, total_cnt, dist,
               gaus_th, gaus_th0, alpha*mean_intra,
               gaus_lhs, gaus_rhs, knn_label, knn1_label))
 
@@ -328,12 +327,13 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 def estimate_feature_dist():
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_rhs, gaus_th, gaus_th0, gaus_rhs, gaus_pdf_ratio
+    global personal_metadata
 
     for i in range(len(feature_data_set.keys())):
         vec= np.array([])
         # estimate intra-subject distribution
+        id = feature_data_set.keys()[i];
         for pos in ['Left','Center', 'Right']:
-            id = feature_data_set.keys()[i];
             personal_data = feature_data_set[id][pos];
             if(len(personal_data) > 0):
                 if (len(vec) == 0):
@@ -341,17 +341,38 @@ def estimate_feature_dist():
                 else:
                     vec = np.concatenate((vec, np.array(personal_data)), axis=0)
 
+        m = 0
+        m_new = 0
+        var = 0
+        n = 0
+        var_new =0
         for v1 in range(len(vec)):
             for v2 in range(v1+1, len(vec)):
                 d = np.sqrt(np.sum(np.square(vec[v1] - vec[v2]) ))
-                #print('id=%s, d=%1.4f' %(id, d))
-
-                mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
 
                 # update mean, variance and count
+                mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
                 var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
                 mean_intra = mean_intra_new
                 N_intra = N_intra+1
+
+                #subject-specific mean and variance estimate
+                m_new = (n*m + d)/(n+1)
+                var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
+                m = m_new
+                n = n + 1
+
+        personal_meta[id] = FaceMeta()
+        personal_meta[id].mean = m
+        personal_meta[id].var = var
+        personal_meta[id].images = len(vec)
+        personal_meta[id].detected = 0
+        personal_meta[id].cur_state = 0
+        personal_meta[id].cur_state = 0
+        personal_meta[id].cur_location = []
+
+
+
 
         #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
@@ -472,6 +493,13 @@ def update_feature_dist(name, personal_features):
         else:
             vec = np.concatenate((vec, personal_data), axis=0)
 
+
+
+    m = 0
+    m_new = 0
+    var = 0
+    n = 0
+    var_new =0
     for i in range(len(vec)):
         for j in range(i+1, len(vec)):
             d = np.sqrt(np.sum(np.square(vec[i] - vec[j]) ))
@@ -483,6 +511,25 @@ def update_feature_dist(name, personal_features):
             var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
             mean_intra = mean_intra_new
             N_intra = N_intra+1
+
+            #subject-specific mean and variance estimate
+            m_new = (n*m + d)/(n+1)
+            var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
+            m = m_new
+            n = n + 1
+
+    #add it to personal metadata
+    id = name
+    personal_meta[id] = FaceMeta()
+    personal_meta[id].mean = m
+    personal_meta[id].var = var
+    personal_meta[id].images = len(vec)
+    personal_meta[id].detected = 0
+    personal_meta[id].cur_state = 0
+    personal_meta[id].cur_state = 0
+    personal_meta[id].cur_location = []
+
+    print('[New] id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
 
     #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
@@ -619,6 +666,13 @@ def delete_name_Local(name):
         f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8')
         f.write(json.dumps(feature_data_set))
         f.close()
+
+        estimate_feature_dist();
+        train_LOF();
+
+        for id in personal_meta.keys():
+            print('id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
+
         return True
     else:
         return False
@@ -641,6 +695,7 @@ def load_modules_Server():
 
 def load_modules_Local():
     global feature_data_set
+    global personal_meta
     f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
 
     str = f.read()
@@ -648,6 +703,9 @@ def load_modules_Local():
         feature_data_set = json.loads(str);
         estimate_feature_dist();
         train_LOF();
+
+    for id in personal_meta.keys():
+        print('id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
 
     f.close()
 
