@@ -47,7 +47,10 @@ mean_inter = 1.5
 var_inter  = 0.01
 N_inter = 0
 gaus_th = 0
-gaus_pdf_ratio = 2000
+
+gaus_pdf_ratio = 10
+gaus_rhs = 0
+alpha = 0.8
 
 #perfmon variables
 total_cnt = 0
@@ -220,9 +223,9 @@ def train_LOF():
 
 def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
-    global gaus_th, gaus_th0
+    global gaus_th, gaus_th0, gaus_rhs
     global cur_face, cur_location, cur_state
-    global total_cnt, false_pos_cnt, false_neg_cnt
+    global total_cnt, false_pos_cnt, false_neg_cnt, alpha
 
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
@@ -240,69 +243,62 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 
         #print(KNN_model.predict_proba([features_128D]))
         (dist, ind) = KNN_model.kneighbors([features_128D], n_neighbors=1, return_distance=True)
+        knn1_label = labels_global[ind[0][0]]
+        knn_label = KNN_model.predict([features_128D])[0]
 
-        knn_label = KNN_model.predict([features_128D])
-        #print(knn_label)
         #print('N1_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
         #print('N1_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
         if (N_intra==0):
-            x = 10000
-            th = -1000
+            gaus_lhs = 10000
+            gaus_rhs = -1000
         else:
-            x = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
-            th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
+            gaus_lhs = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
+            #th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
 
 
         total_cnt +=1
 
         #if (x < th) and (pred==1):
-        if (x < th) and (labels_global[ind[0][0]]==knn_label[0]):
+        if (gaus_lhs < gaus_rhs) and (knn1_label==knn_label):
             #face filtering
             if (cur_face == None):
                 #subject not present before, stricter detection rule applies
-                if (dist < (mean_intra - np.sqrt(var_intra))):
+                if (dist < (mean_intra - alpha*np.sqrt(var_intra))):
                     #this face is 1st time recognized, reset after idle time of 1min?
-                    cur_face = knn_label[0]
+                    cur_face = knn_label
                     cur_state = 0
                     cur_location = face_locations[0]
-                    returnRes = knn_label[0]
                     false_pos_cnt += 1
+                    returnRes = knn_label
                 else:
-                    regRes.append("Unknown ")
+                    returnRes = "Unknown"
+                    #regRes.append("Unknown")
 
-                #cur_state += 1
-                #if (cur_state == 3):
-                #    cur_face = knn_label[0]
-                #    cur_state = 0
-                #    cur_location = face_locations[0]
-
-                #    returnRes = knn_label[0]
-                #else:
-                #    regRes.append(" ")
             else:
                 d = np.sqrt(np.sum(np.square(face_locations[0] - cur_location) ))
                 d0 = 0.1 * np.sqrt(640*640 + 480*480)
-                if(knn_label[0] != cur_face) and (d<d0):
+                if(knn_label != cur_face) and (d<d0):
                     cur_state += 1
                     if (cur_state == 3):
-                        cur_face = knn_label[0]
+                        cur_face = knn_label
                         cur_state = 0
                         cur_location = face_locations[0]
 
-                        returnRes = knn_label[0]
+                        returnRes = knn_label
                     else:
-                        print('[Abnorma]cur_state=%d, detected face=%s' %(cur_state, knn_label[0]))
-                        regRes.append(" ")
+                        print('[Abnorma]cur_state=%d, detected face=%s' %(cur_state, knn_label))
+                        returnRes = " "
+                        #regRes.append(" ")
 
                 else:
                     if cur_state>0:
-                        print('[Reset] cur_state=%d, detected face=%s' %(cur_state, knn_label[0]))
-                    cur_face = knn_label[0]
+                        print('[Reset] cur_state=%d, detected face=%s' %(cur_state, knn_label))
+                    cur_face = knn_label
                     cur_state = 0
                     cur_location = face_locations[0]
 
-                    returnRes = knn_label[0]
+                    returnRes = knn_label
 
             #returnRes = knn_label[0]
         #percentage =  min(100, 100 * thres / smallest)
@@ -318,9 +314,11 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
     if total_cnt == 500:
         print('total_cnt:%d, false_neg:%d' %(total_cnt, false_neg_cnt))
 
-    print('ret=[%s], cnt=%d, n_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, total_cnt, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]]))
+    print('ret=[%s], cnt=%d, cur_face=%s, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
+            %(regRes, total_cnt, cur_face, dist,
+              gaus_th, gaus_th0, alpha*mean_intra,
+              gaus_lhs, gaus_rhs, knn_label, knn1_label))
 
-    #print('ret=[%s], nn_dist=%f, gaus_th=%f/%f,  x=%f, th=%f, knn_pred=%s, nn_pred=%s' %(regRes, dist, gaus_th, gaus_th0, x, th, knn_label, labels_global[ind[0][0]]))
     return regRes
 
 
@@ -328,7 +326,8 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 
 
 def estimate_feature_dist():
-    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, gaus_th, gaus_th0, gaus_pdf_ratio
+    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
+    global gaus_rhs, gaus_th, gaus_th0, gaus_rhs, gaus_pdf_ratio
 
     for i in range(len(feature_data_set.keys())):
         vec= np.array([])
@@ -385,19 +384,19 @@ def estimate_feature_dist():
 
                     #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
 
-    th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
+    gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
     b = -2*(mean_intra * var_inter - mean_inter*var_intra)
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
+    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs*var_inter*var_intra
     gaus_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-    th = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
+
+    gaus_rhs0 = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
+    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs0*var_inter*var_intra
     gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
 
-    print('a=%f, b=%f, c=%f, root=%f, gaus_th0=%f' %(a,b,c,gaus_th, gaus_th0))
+    print('a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
     print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
-    print('TH=%f' %(th))
 
 
 
@@ -508,15 +507,19 @@ def update_feature_dist(name, personal_features):
     print('[new] N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('[new[ N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
-    th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
+    gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
     b = -2*(mean_intra * var_inter - mean_inter*var_intra)
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - th*var_inter*var_intra
-    gaus_th= (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-    print('a=%f, b=%f, c=%f, root=%f' %(a,b,c,gaus_th))
+    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs*var_inter*var_intra
+    gaus_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+
+    gaus_rhs0 = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
+    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs0*var_inter*var_intra
+    gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
+
+    print('a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
     print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
     print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
-    print('TH=%f' %(th))
 
 
 def save_feature_Local(name, person_features):
