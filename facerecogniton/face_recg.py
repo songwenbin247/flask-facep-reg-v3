@@ -286,7 +286,7 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             else:
                 # the subject has been identified
 
-                d = np.sqrt(np.sum(np.square(face_locations[0] - meta.cur_location) ))
+                d = np.sqrt(np.sum(np.square(face_locations[i] - meta.cur_location) ))
                 d0 = 0.2 * np.sqrt(640*640 + 480*480)
 
                 if (d<d0):
@@ -294,12 +294,12 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
                         print('[Reset] cur_state=%d, detected face=%s' %(meta.cur_state, knn_label))
 
                     meta.cur_state = 0
-                    meta.cur_location = face_locations[0]
+                    meta.cur_location = face_locations[i]
                     returnRes = knn_label
 
                 else:
                     meta.cur_state += 1
-                    meta.cur_location = face_locations[0]
+                    meta.cur_location = face_locations[i]
 
                     if (meta.cur_state == 3):
                         meta.cur_state = 0
@@ -313,7 +313,7 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             regRes.append("Unknown")
 
 
-    print('ret=[%s], cnt=%d, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
+        print('ret=[%s], cnt=%d, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
             %(regRes, total_cnt, dist,
               gaus_th, gaus_th0, alpha*mean_intra,
               gaus_lhs, gaus_rhs, knn_label, knn1_label))
