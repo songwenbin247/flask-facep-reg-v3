@@ -4,7 +4,7 @@ import pickle
 
 class FeaturesDB():
 
-    def __init__(self, db_path='./models/features_128D.db'):
+    def __init__(self, db_path='./models/features_128D.db.42p'):
         def adapt_list(dat):
             return pickle.dumps(dat)
 

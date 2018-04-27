@@ -253,10 +253,12 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
         if (gaus_lhs < gaus_rhs) and (knn1_label==knn_label):
             #face filtering
             meta = personal_meta[knn_label]
-            if hot_faces.isHot(knn_label, face_locations[i]):
+            (isHot, isFull) = hot_faces.isHot(knn_label, face_locations[i])
+            if isHot:
                 regRes.append(knn_label)
                 print "person is hot"
-
+                if not isFull:
+                    hot_faces.update(knn_label, face_locations[i])
             else:
                 if (dist < (meta.mean - 0.5*np.sqrt(meta.var))):
                     hot_faces.update(knn_label, face_locations[i])
@@ -299,7 +301,7 @@ def estimate_feature_dist():
         var_new =0
         for v1 in range(len(vec)):
             for v2 in range(v1+1, len(vec)):
-                d = np.sqrt(np.sum(np.square(vec[v1] - vec[v2]) ))
+                d = np.sqrt(np.sum(np.square(vec[v1] - vec[v2])))
 
                 # update mean, variance and count
                 mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)

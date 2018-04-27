@@ -63,7 +63,7 @@ class PositionStream():
 #       }
 # }
 class HotFaces():
-    timeout = 1.0
+    timeout = 5.0
 
     def __init__(self, max_person):
         self.hot_pool = LRUCache(max_person)
@@ -82,17 +82,17 @@ class HotFaces():
         time_now = time.time()
         if name not in self.hot_pool.keys():
             print '*** %s no in pool' % name
-            return False
+            return (False,False)
         tposi = self.hot_pool.get(name)
         posi = tposi['PosiStream']
         if time_now - tposi['time'] > HotFaces.timeout:  # the time is greater than 1s since the last update.
             self.hot_pool.pop(name)
             print "*** timeout %f" % (time_now - tposi['time'])
-            return False
+            return (False,False)
 
         if posi.fifo.size < 2:
             print "*** %s fifo size is %d" % (name, posi.fifo.size)
-            return False
+            return (True, False)
 
         tl = [ k[0] for k in posi.position()]
         pl = [ k[1] for k in posi.position()]
@@ -108,9 +108,9 @@ class HotFaces():
         dis = np.sqrt( np.square(px - rect[0]) + np.square(py - rect[1]))
         if  dis > 350 * t2:
             print "*** dis = %f" % dis
-            return False
+            return (False,False)
         self.update(name, rect)
-        return True
+        return (True, True)
         # if len(re) < 2:
         #     return (1, '')
         #
