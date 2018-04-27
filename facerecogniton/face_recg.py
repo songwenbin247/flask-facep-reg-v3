@@ -26,6 +26,7 @@ from face_tracker import *
 import codecs
 import requests
 import hot_pool
+from data_base import  FeaturesDB
 
 from sklearn.svm import SVC
 from sklearn.svm import NuSVC
@@ -517,14 +518,11 @@ def save_feature_Local(name, person_features):
     #train the classifier using updated features
     train_LOF();
 
-    f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
-    f.write(json.dumps(feature_data_set))
-
-    #update perfmon
+    fdb = FeaturesDB()
+    for p in ['Left', 'Right', 'Center']:
+        fdb.add_features(name, person_features[p], p)
     total_cnt = 0
     false_neg_cnt = 0
-
-    f.close()
 
 
 def __training_thread_local(callback):
@@ -601,9 +599,8 @@ def delete_name_Server(name):
 def delete_name_Local(name):
     if (feature_data_set is not None and name in feature_data_set):
         del feature_data_set[name]
-        f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8')
-        f.write(json.dumps(feature_data_set))
-        f.close()
+        fdb = FeaturesDB()
+        fdb.del_person(name)
 
         estimate_feature_dist();
         train_LOF();
@@ -634,18 +631,22 @@ def load_modules_Server():
 def load_modules_Local():
     global feature_data_set
     global personal_meta
-    f = codecs.open('./models/facerec_128D.txt','r', 'utf-8');
+    fdb = FeaturesDB()
+    names = fdb.get_names()
 
-    str = f.read()
-    if(len(str) != 0):
-        feature_data_set = json.loads(str);
-        estimate_feature_dist();
-        train_LOF();
+    for name in names:
+        fl = [x for x in fdb.features(name, 'Left')]
+        fr = [x for x in fdb.features(name, 'Right')]
+        fc = [x for x in fdb.features(name, 'Center')]
+        feature_data_set[name] = {'Left': fl, 'Right': fr, 'Center': fc}
+
+    if len(feature_data_set):
+        estimate_feature_dist()
+        train_LOF()
 
     for id in personal_meta.keys():
         print('id=%s, m=%f, var=%f' %(id, personal_meta[id].mean, personal_meta[id].var))
 
-    f.close()
 
 load_modules = load_modules_Local
 delete_name = delete_name_Local
