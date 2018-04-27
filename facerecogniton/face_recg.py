@@ -25,6 +25,7 @@ import threading
 from face_tracker import *
 import codecs
 import requests
+import hot_pool
 
 from sklearn.svm import SVC
 from sklearn.svm import NuSVC
@@ -35,6 +36,7 @@ import ntpath
 
 from face_meta import *
 
+hot_faces= hot_pool.HotFaces(10)
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
@@ -223,19 +225,14 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
     global total_cnt, false_pos_cnt, false_neg_cnt, alpha
     global personal_meta
 
-    regRes = [];
+    regRes = []
     for (i,features_128D) in enumerate(features_arr):
-        returnRes = " ";
+        returnRes = " "
 
         if feature_data_set == None:
             regRes.append("Unknown")
             return regRes
-
-        if (LOF_model == None):
-            pred = -1
-        else:
-            pred = LOF_model._predict([features_128D])
-
+        #
 
         #print(KNN_model.predict_proba([features_128D]))
         (dist, ind) = KNN_model.kneighbors([features_128D], n_neighbors=1, return_distance=True)
@@ -252,66 +249,22 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             gaus_lhs = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
             #th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
 
-
-        total_cnt +=1
-
         if (gaus_lhs < gaus_rhs) and (knn1_label==knn_label):
             #face filtering
             meta = personal_meta[knn_label]
-
-            if (meta.detected == 0):
-                #subject not present before, stricter detection rule applies
-
-                if (dist < (meta.mean - 1.0*np.sqrt(meta.var))):
-                #if (dist < (ra - alpha*np.sqrt(var_intra))):
-                    #this face is 1st time recognized, reset after idle time of 1min?
-
-                    meta.cur_state += 1
-                    if(meta.cur_state == 1):
-                        print('initial detection: dist=%f, th=%f' %(dist, meta.mean - np.sqrt(meta.var)))
-                        meta.detected = 1
-                        meta.cur_state = 0
-                        meta.cur_location = face_locations[0]
-
-                        returnRes = knn_label
-                    else:
-                        print('initial detect, state=%d' %(meta.cur_state))
-                        returnRes = "Unknown"
-
-                else:
-                    print('initial detect, state=%d, dist=%f, th=%f, reset' %(meta.cur_state, dist, meta.mean - 1.0*np.sqrt(meta.var)))
-                    meta.cur_state = 0
-                    returnRes = "Unknown"
+            if hot_faces.isHot(knn_label, face_locations[i]):
+                regRes.append(knn_label)
+                print "person is hot"
 
             else:
-                # the subject has been identified
-
-                d = np.sqrt(np.sum(np.square(face_locations[i] - meta.cur_location) ))
-                d0 = 0.2 * np.sqrt(640*640 + 480*480)
-
-                if (d<d0):
-                    if meta.cur_state>0:
-                        print('[Reset] cur_state=%d, detected face=%s' %(meta.cur_state, knn_label))
-
-                    meta.cur_state = 0
-                    meta.cur_location = face_locations[i]
-                    returnRes = knn_label
-
+                if (dist < (meta.mean - 0.5*np.sqrt(meta.var))):
+                    hot_faces.update(knn_label, face_locations[i])
+                    regRes.append(knn_label)
                 else:
-                    meta.cur_state += 1
-                    meta.cur_location = face_locations[i]
+                    regRes.append("Unknown")
 
-                    if (meta.cur_state == 3):
-                        meta.cur_state = 0
-                        returnRes = knn_label
-                    else:
-                        print('[Abnorma]cur_state=%d, detected face=%s' %(meta.cur_state, knn_label))
-                        returnRes = " "
-
-            regRes.append(returnRes)
         else:
             regRes.append("Unknown")
-
 
         print('ret=[%s], cnt=%d, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
             %(regRes, total_cnt, dist,
@@ -319,9 +272,6 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
               gaus_lhs, gaus_rhs, knn_label, knn1_label))
 
     return regRes
-
-
-
 
 
 def estimate_feature_dist():
@@ -365,14 +315,6 @@ def estimate_feature_dist():
         personal_meta[id] = FaceMeta()
         personal_meta[id].mean = m
         personal_meta[id].var = var
-        personal_meta[id].images = len(vec)
-        personal_meta[id].detected = 0
-        personal_meta[id].cur_state = 0
-        personal_meta[id].cur_state = 0
-        personal_meta[id].cur_location = []
-
-
-
 
         #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
@@ -523,13 +465,9 @@ def update_feature_dist(name, personal_features):
     personal_meta[id] = FaceMeta()
     personal_meta[id].mean = m
     personal_meta[id].var = var
-    personal_meta[id].images = len(vec)
-    personal_meta[id].detected = 0
-    personal_meta[id].cur_state = 0
-    personal_meta[id].cur_state = 0
-    personal_meta[id].cur_location = []
 
-    print('[New] id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
+
+    print('[New] id=%s, m=%f, var=%f' %(id, personal_meta[id].mean, personal_meta[id].var))
 
     #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
@@ -671,7 +609,7 @@ def delete_name_Local(name):
         train_LOF();
 
         for id in personal_meta.keys():
-            print('id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
+            print('id=%s, m=%f, var=%f' %(id, personal_meta[id].mean, personal_meta[id].var))
 
         return True
     else:
@@ -705,7 +643,7 @@ def load_modules_Local():
         train_LOF();
 
     for id in personal_meta.keys():
-        print('id=%s, images=%d, m=%f, var=%f' %(id, personal_meta[id].images, personal_meta[id].mean, personal_meta[id].var))
+        print('id=%s, m=%f, var=%f' %(id, personal_meta[id].mean, personal_meta[id].var))
 
     f.close()
 

@@ -1,30 +1,20 @@
-import faste
-from faste.util import hashable
+from faste import util, caches
 import time
-import sys
-from sklearn import neighbors
+import numpy as np
+
+class RRCache(caches.RRCache):
+    def move_to_end(self, key, last=True):
+        va = self._store.pop(key)
+        self._store[key] = va
 
 
-class FIFOCache(faste.caches.RRCache):
-    """
-    First In First Out cache.
-    When the max_size is reached, the cache evicts the first key set/accessed without any regard to when or
-    how often it is accessed.
-
-    Parameters
-    ----------
-    max_size : int
-        Max size of the cache. Must be > 0
-    populate : dict
-        Keyword argument with values to populate cache with, in no given order. Can't be larger than max_size
-
-    """
+class FIFOCache(RRCache):
 
     def __init__(self, max_size, populate=None):
         super(FIFOCache, self).__init__(max_size, populate=populate)
 
     def __setitem__(self, key, value):
-        if not hashable(key):
+        if not util.hashable(key):
             raise TypeError("unhashable type: {0!r}".format(type(key.__class__.__name__)))
 
         self._store[key] = value
@@ -34,18 +24,6 @@ class FIFOCache(faste.caches.RRCache):
 
 
 class LRUCache(FIFOCache):
-    """
-    Least recently used cache implementation.
-    When the max size is reached, the least recently used value is evicted from the cache.
-
-    Parameters
-    ----------
-    max_size : int
-        Max size of the cache. Must be > 0
-    populate : dict
-        Keyword argument with values to populate cache with, in no given order. Can't be larger than max_size
-
-    """
 
     def __init__(self, max_size, populate=None):
         super(LRUCache, self).__init__(max_size, populate=populate)
@@ -54,7 +32,7 @@ class LRUCache(FIFOCache):
         if item not in self._store:
             raise KeyError("key {0!r} not in cache".format(item))
 
-        self._store.move_to_end(item)
+        self.move_to_end(item)
         return self._store[item]
 
 
@@ -65,13 +43,11 @@ class LRUCache(FIFOCache):
 # }
 
 class PositionStream():
-    def __init__(self, max_frame=None):
-        if max_frame is None:
-            max_frame = 30
-        self.fifo = FIFOCache(max_frame)
+    def __init__(self, ):
+        self.fifo = FIFOCache(2)
 
     def push(self, rect, pos):
-        self.fifo.update((time.time, {'rect': rect, 'pos': pos}))
+        self.fifo.update((time.time(), {'rect': rect, 'pos': pos}))
 
     def resize(self, max_frame):
         self.fifo.max_size = max_frame
@@ -81,78 +57,60 @@ class PositionStream():
             posi = self.fifo.get(k)
             yield [k, posi['rect']]
 
-
 # {name: {
 #       'time': time,
 #       'PosiStream': tposi
 #       }
 # }
 class HotFaces():
-    last_adjust_time = 0
-    frames_sum = 0
-    pps = 5
     timeout = 1.0
-    instance_list = []
 
-    def __init__(self, max_person, radius):
+    def __init__(self, max_person):
         self.hot_pool = LRUCache(max_person)
-        HotFaces.instance_list.append(self)
-        self.RNC = neighbors.RadiusNeighborsClassifier(radius=radius)
-        self.labels_Y = []
-        self.vac_X = []
 
-    @classmethod
-    def auto_adjust_stream_size(cls):  # called when receiving a frame.
-        if cls.last_adjust_time != 0:
-            cls.frames_sum += 1
-        else:
-            cls.last_adjust_time = time.time()
-            cls.frames_sum = 0
-
-        if cls.frames_sum > 20:
-            pps = cls.frames_sum / (time.time() - cls.last_adjust_time)
-            cls.last_adjust_time = time.time()
-            cls.frames_sum = 0
-            if abs(int(pps) - cls.pps) > 3:
-                cls.pps = int(pps)
-            for i in cls.instance_list:
-                i.stream.resize(cls.pps * cls.timeout + 6)
-
-    def update(self, name, rect, pos):
+    def update(self, name, rect, pos=None):
         time_new = time.time()
         if name not in self.hot_pool.keys():
-            posi = PositionStream(HotFaces.pps * HotFaces.timeout + 4)
+            posi = PositionStream()
             posi.push(rect, pos)
             self.hot_pool.update((name, {'time': time_new, 'PosiStream': posi}))
         else:
-            dic = self.hot_pool.get(name)
-            dic['time'] = time_new
-            dic['PosiStream'].push(rect, pos)
-        self.labels_Y = []
-        self.vac_X = []
-        for name in self.hot_pool.keys():
-            tposi = self.hot_pool.get(name)
-            if time_new - tposi['time'] > HotFaces.timeout:
-                self.hot_pool.pop(name)
-                continue
+           self.hot_pool.get(name)['time'] = time_new
+           self.hot_pool.get(name)['PosiStream'].push(rect, pos)
 
-            for posi in tposi['PosiStream'].position():
-                self.labels_Y.append(name)
-                self.vac_X.append([posi[1][0], posi[1][1]])
-
-        self.RNC.fit(self.labels_Y, self.labels_Y)
-
-    def isHot(self, name, rect, pos):
+    def isHot(self, name, rect, pos=None):
         time_now = time.time()
         if name not in self.hot_pool.keys():
-            return (0, '')
-
-        if time_now - self.hot_pool.get(name) > HotFaces.timeout:  # the time is greater than 1s since the last update.
+            print '*** %s no in pool' % name
+            return False
+        tposi = self.hot_pool.get(name)
+        posi = tposi['PosiStream']
+        if time_now - tposi['time'] > HotFaces.timeout:  # the time is greater than 1s since the last update.
             self.hot_pool.pop(name)
-            return (0, '')
+            print "*** timeout %f" % (time_now - tposi['time'])
+            return False
 
-        ret = self.RNC.predict([rect[0], rect[1]])
-        return self.labels_Y[ret[0]]
+        if posi.fifo.size < 2:
+            print "*** %s fifo size is %d" % (name, posi.fifo.size)
+            return False
+
+        tl = [ k[0] for k in posi.position()]
+        pl = [ k[1] for k in posi.position()]
+        # tl = [time_1, time_2]
+        # pl = [[px1, py1, sx1, sy1], [px2, py2, sx2, sy2]]
+        # px = (px2 - px1)/ (time_2 - time-1) * (time_new - time_2) + px2
+        # py = (py2 - py1) / (time_2 - time - 1) * (time_new - time_2) + py2
+        t1 = tl[1] - tl[0]
+        t2 = time_now - tl[1]
+        px = ((pl[1][0] - pl[0][0]) / t1) * t2 + pl[1][0]
+        py = ((pl[1][1] - pl[0][1]) / t1) * t2 + pl[1][1]
+        #print("### %f %f %d %d  %f" % (abs(px - rect[0]), abs(py - rect[1]), rect[2], rect[3], t2))
+        dis = np.sqrt( np.square(px - rect[0]) + np.square(py - rect[1]))
+        if  dis > 350 * t2:
+            print "*** dis = %f" % dis
+            return False
+        self.update(name, rect)
+        return True
         # if len(re) < 2:
         #     return (1, '')
         #
@@ -207,6 +165,20 @@ class HotFaces():
 
 
 if __name__ == '__main__':
-    a = frame_stream(5)
+    a = LRUCache(4)
+    a.update(('a',1))
+    a.update(('b', 2))
+    a.update(('c', 3))
+    a.update(('d', 4))
 
+    print a.get('a')
+    print a.get('b')
+    print a.get('c')
+    print a.get('d')
+    print a.get('a')
+    print a.get('b')
+    print a.get('d')
 
+    a.update(('e', 5))
+    print a.keys()
+    print 'end'
