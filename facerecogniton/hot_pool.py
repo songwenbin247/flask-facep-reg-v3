@@ -81,7 +81,7 @@ class HotFaces():
     def isHot(self, name, rect, pos=None):
         time_now = time.time()
         if name not in self.hot_pool.keys():
-            print '*** %s no in pool' % name
+            #print '*** %s no in pool' % name
             return (False,False)
         tposi = self.hot_pool.get(name)
         posi = tposi['PosiStream']
@@ -106,8 +106,9 @@ class HotFaces():
         py = ((pl[1][1] - pl[0][1]) / t1) * t2 + pl[1][1]
         #print("### %f %f %d %d  %f" % (abs(px - rect[0]), abs(py - rect[1]), rect[2], rect[3], t2))
         dis = np.sqrt( np.square(px - rect[0]) + np.square(py - rect[1]))
-        if  dis > 350 * t2:
-            print "*** dis = %f" % dis
+        #if  dis > 350 * t2:
+        if  dis > 700 * t2:
+            print ('*** dis = %f, t2=%f' % (dis, t2))
             return (False,False)
         self.update(name, rect)
         return (True, True)

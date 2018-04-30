@@ -30,6 +30,7 @@ from data_base import  FeaturesDB
 
 from sklearn.svm import SVC
 from sklearn.svm import NuSVC
+from sklearn.svm import OneClassSVM
 from sklearn import neighbors, datasets
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn import neighbors, datasets
@@ -53,9 +54,8 @@ var_inter  = 0.01
 N_inter = 0
 gaus_th = 0
 
-gaus_pdf_ratio = 10
+gaus_pdf_ratio = 1.0
 gaus_rhs = 0
-alpha = 0.8
 
 #perfmon variables
 total_cnt = 0
@@ -66,7 +66,6 @@ personal_meta = dict()
 
 LOF_model = None
 KNN_model = None
-KNN_neighbors = 11
 vec_global = None
 labels_global=None
 CAMERA_NUMBER = 4
@@ -184,7 +183,7 @@ This function basically does a simple linear search for
 '''
 
 def train_LOF():
-    global LOF_model, KNN_model, KNN_neighbors
+    global LOF_model, KNN_model
     global vec_global, labels_global
 
     labels = np.array([])
@@ -195,24 +194,19 @@ def train_LOF():
 
     for id in feature_data_set.keys():
         # estimate intra-subject distribution
-        personal_samples = 0
-        for pos in ['Left','Center', 'Right']:
-            personal_data = feature_data_set[id ][pos];
-            personal_samples = personal_samples + len(personal_data)
-            if(len(personal_data) > 0):
-                if (len(vec) == 0):
-                    vec = np.array(personal_data)
-                else:
-                    vec = np.concatenate((vec, np.array(personal_data)), axis=0)
+        centroid = personal_meta[id].centroid
+        labels = np.append(labels, id)
 
-        for i in range(personal_samples):
-            labels = np.append(labels, id)
+        if (len(vec) == 0):
+            vec = np.array([centroid])
+        else:
+            vec = np.concatenate((vec, np.array([centroid])), axis=0)
 
 
     print('vecs=%d, labels=%d' %(len(vec), len(labels)))
     #LOF_model = LocalOutlierFactor(n_neighbors=20)
     #LOF_model = LOF_model.fit(vec, labels)
-    KNN_model = neighbors.KNeighborsClassifier(KNN_neighbors, weights='uniform')
+    KNN_model = neighbors.KNeighborsClassifier(1, weights='uniform')
     KNN_model = KNN_model.fit(vec, labels)
 
     vec_global = vec
@@ -223,7 +217,7 @@ def train_LOF():
 def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_th, gaus_th0, gaus_rhs
-    global total_cnt, false_pos_cnt, false_neg_cnt, alpha
+    global total_cnt, false_pos_cnt, false_neg_cnt
     global personal_meta
 
     regRes = []
@@ -235,13 +229,10 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             return regRes
         #
 
+        total_cnt += 1
         #print(KNN_model.predict_proba([features_128D]))
         (dist, ind) = KNN_model.kneighbors([features_128D], n_neighbors=1, return_distance=True)
-        knn1_label = labels_global[ind[0][0]]
         knn_label = KNN_model.predict([features_128D])[0]
-
-        #print('N1_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-        #print('N1_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
         if (N_intra==0):
             gaus_lhs = 10000
@@ -250,29 +241,36 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             gaus_lhs = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
             #th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
 
-        if (gaus_lhs < gaus_rhs) and (knn1_label==knn_label):
+
+        meta = personal_meta[knn_label]
+        svm_pred = meta.svm.predict([features_128D])
+        if (gaus_lhs < gaus_rhs) :
+        #if (gaus_lhs < gaus_rhs) and (svm_pred == 1) :
             #face filtering
-            meta = personal_meta[knn_label]
             (isHot, isFull) = hot_faces.isHot(knn_label, face_locations[i])
             if isHot:
                 regRes.append(knn_label)
-                print "person is hot"
+                #print "person is hot"
                 if not isFull:
                     hot_faces.update(knn_label, face_locations[i])
             else:
-                if (dist < (meta.mean - 0.5*np.sqrt(meta.var))):
+                #if (dist < (meta.mean + 1.0*np.sqrt(meta.var))):
+                if (svm_pred == 1):
+                    print('cold pred passd')
                     hot_faces.update(knn_label, face_locations[i])
                     regRes.append(knn_label)
                 else:
+                    print('cold pred failed')
                     regRes.append("Unknown")
 
         else:
             regRes.append("Unknown")
 
-        print('ret=[%s], cnt=%d, knn1_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s, knn1_pred=%s'
+        meta_th = meta.mean + 1.0*np.sqrt(meta.var)
+        print('ret=[%s], cnt=%d, knn_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s'
             %(regRes, total_cnt, dist,
-              gaus_th, gaus_th0, alpha*mean_intra,
-              gaus_lhs, gaus_rhs, knn_label, knn1_label))
+              gaus_th, gaus_th0, meta_th,
+              gaus_lhs, gaus_rhs, knn_label))
 
     return regRes
 
@@ -283,9 +281,12 @@ def estimate_feature_dist():
     global personal_metadata
 
     for i in range(len(feature_data_set.keys())):
-        vec= np.array([])
+
         # estimate intra-subject distribution
         id = feature_data_set.keys()[i];
+        personal_meta[id] = FaceMeta()
+
+        vec= np.array([])
         for pos in ['Left','Center', 'Right']:
             personal_data = feature_data_set[id][pos];
             if(len(personal_data) > 0):
@@ -294,61 +295,64 @@ def estimate_feature_dist():
                 else:
                     vec = np.concatenate((vec, np.array(personal_data)), axis=0)
 
+        n=0
+        personal_meta[id].centroid = np.zeros(128)
+        for v in vec:
+            personal_meta[id].centroid = (n * personal_meta[id].centroid + v) /(n+1)
+            n += 1
+
+
+        #train a one-class SVM
+        model = OneClassSVM()
+        model = model.fit(vec)
+
         m = 0
         m_new = 0
         var = 0
         n = 0
         var_new =0
-        for v1 in range(len(vec)):
-            for v2 in range(v1+1, len(vec)):
-                d = np.sqrt(np.sum(np.square(vec[v1] - vec[v2])))
+        for v in vec:
 
-                # update mean, variance and count
-                mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
-                var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
-                mean_intra = mean_intra_new
-                N_intra = N_intra+1
+            d = np.sqrt(np.sum(np.square(v - personal_meta[id].centroid)))
 
-                #subject-specific mean and variance estimate
-                m_new = (n*m + d)/(n+1)
-                var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
-                m = m_new
-                n = n + 1
+            # update mean, variance and count
+            mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
+            var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
+            mean_intra = mean_intra_new
+            N_intra = N_intra+1
 
-        personal_meta[id] = FaceMeta()
+            #subject-specific mean and variance estimate
+            m_new = (n*m + d)/(n+1)
+            var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
+            m = m_new
+            n = n + 1
+
         personal_meta[id].mean = m
         personal_meta[id].var = var
+        personal_meta[id].svm = model
+
 
         #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
+    ## Estimate inter-subject distribution
+    for i in range(len(feature_data_set.keys())):
+        id1 = feature_data_set.keys()[i];
+        v1 = personal_meta[id1].centroid
         for j in range(i+1, len(feature_data_set.keys())):
-            vec2 = np.array([])
 
-            # collect ID-j's features
-            for pos in ['Left','Center', 'Right']:
-                id = feature_data_set.keys()[j];
-                personal_data = feature_data_set[id ][pos];
+            id2 = feature_data_set.keys()[j];
+            v2 = personal_meta[id2].centroid
+            d = np.sqrt(np.sum(np.square(v1 - v2)))
+            #print('id=%s, d=%1.4f' %(id, d))
 
-                if(len(personal_data) > 0):
-                    if (len(vec2) == 0):
-                        vec2 = personal_data
-                    else:
-                        vec2 = np.concatenate((vec2, personal_data), axis=0)
+            mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
 
+            # update mean, variance and count
+            var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
+            mean_inter = mean_inter_new
+            N_inter = N_inter+1
 
-            for v1 in vec:
-                for v2 in vec2:
-                    d = np.sqrt(np.sum(np.square(v1 - v2) ))
-                    #print('id=%s, d=%1.4f' %(id, d))
-
-                    mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
-
-                    # update mean, variance and count
-                    var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
-                    mean_inter = mean_inter_new
-                    N_inter = N_inter+1
-
-                    #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
+            #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
 
     gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
@@ -361,8 +365,8 @@ def estimate_feature_dist():
     gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
 
     print('a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
-    print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-    print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
+    print('N_intra=%d, mean=%f, var=%f, sigma=%f'%(N_intra, mean_intra, var_intra, np.sqrt(var_intra)))
+    print('N_inter=%d, mean=%f, var=%f, sigma=%f '%(N_inter, mean_inter, var_inter, np.sqrt(var_inter)))
 
 
 
@@ -438,6 +442,16 @@ def update_feature_dist(name, personal_features):
         else:
             vec = np.concatenate((vec, personal_data), axis=0)
 
+    #Calc cluster centroid
+    n=0
+    centroid = np.zeros(128)
+    for v in vec:
+        centroid = (n * centroid + v) /(n+1)
+        n += 1
+
+    #train a one-class SVM
+    model = OneClassSVM()
+    model = model.fit(vec)
 
 
     m = 0
@@ -445,55 +459,50 @@ def update_feature_dist(name, personal_features):
     var = 0
     n = 0
     var_new =0
-    for i in range(len(vec)):
-        for j in range(i+1, len(vec)):
-            d = np.sqrt(np.sum(np.square(vec[i] - vec[j]) ))
-            #print('id=%s, d=%1.4f' %(id, d))
 
-            mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
+    for v in vec:
 
-            # update mean, variance and count
-            var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
-            mean_intra = mean_intra_new
-            N_intra = N_intra+1
+        d = np.sqrt(np.sum(np.square(v - centroid)))
 
-            #subject-specific mean and variance estimate
-            m_new = (n*m + d)/(n+1)
-            var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
-            m = m_new
-            n = n + 1
+        # update mean, variance and count
+        mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
+        var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
+        mean_intra = mean_intra_new
+        N_intra = N_intra+1
+
+        #subject-specific mean and variance estimate
+        m_new = (n*m + d)/(n+1)
+        var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
+        m = m_new
+        n = n + 1
+
 
     #add it to personal metadata
     id = name
     personal_meta[id] = FaceMeta()
     personal_meta[id].mean = m
     personal_meta[id].var = var
+    personal_meta[id].svm = model
+    personal_meta[id].centroid = centroid
 
 
-    print('[New] id=%s, m=%f, var=%f' %(id, personal_meta[id].mean, personal_meta[id].var))
+
+    print('[New] id=%s, m=%f, var=%f, sigma=%f' %(id, m, var, np.sqrt(var)))
 
     #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
 
-    for v1 in vec:
-        for id, v2 in enumerate(vec_global):
-            d = np.sqrt(np.sum(np.square(v1 - v2) ))
+    v1 = personal_meta[id].centroid
+    for v2 in vec_global:
+        d = np.sqrt(np.sum(np.square(v1 - v2) ))
 
-            if name == labels_global[id]:
-                continue
+        mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
 
-            #print('id=%s, d=%1.4f' %(id, d))
-
-            mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
-
-            # update mean, variance and count
-            var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
-            mean_inter = mean_inter_new
-            N_inter = N_inter+1
+        # update mean, variance and count
+        var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
+        mean_inter = mean_inter_new
+        N_inter = N_inter+1
 
             #print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
-
-    print('[new] N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-    print('[new[ N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
 
     gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
     a = var_inter - var_intra
@@ -505,9 +514,10 @@ def update_feature_dist(name, personal_features):
     c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs0*var_inter*var_intra
     gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
 
-    print('a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
-    print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-    print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
+    print('[new] N_intra=%d, mean=%f, var=%f, sigma=%f'%(N_intra, mean_intra, var_intra, np.sqrt(var_intra)))
+    print('[new[ N_inter=%d, mean=%f, var=%f, sigma=%f'%(N_inter, mean_inter, var_inter, np.sqrt(var_inter)))
+
+    print('[new] a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
 
 
 def save_feature_Local(name, person_features):
