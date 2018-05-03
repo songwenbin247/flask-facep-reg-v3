@@ -120,7 +120,7 @@ class TrainModelsWX(Resource):
             print request.form
             name = request.form['id'].decode('utf-8')
             img_num = facemodules.get_images_num(name)
-            if(img_num['l'] >= 15 and img_num['r'] >= 15 and img_num['c'] >= 15):
+            if(img_num['l'] >= 5 and img_num['r'] >= 5 and img_num['c'] >= 10):
                 raise Exception()
 
             pif=StringIO.StringIO()
@@ -131,7 +131,7 @@ class TrainModelsWX(Resource):
 
             facemodules.training_proframe_detect(name, frame)
             img_num = facemodules.get_images_num(name)
-            if(img_num['l'] >= 15 and img_num['r'] >= 15 and img_num['c'] >= 15):
+            if(img_num['l'] >= 5 and img_num['r'] >= 5 and img_num['c'] >= 10):
                 facemodules.training_finish(name, self.__send_train_finish)
         except Exception as e:
             pass
@@ -143,6 +143,6 @@ class TrainModelsWX(Resource):
 ## Actually setup the Api resource routing here
 ##
 api.add_resource(TrainModels, '/train')
-api.add_resource(TrainModelsWX, '/trainwx')
+api.add_resource(TrainModelsWX, '/')
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8383, debug=False)

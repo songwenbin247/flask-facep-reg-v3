@@ -62,8 +62,10 @@ def get_train_status(name):
 
 def get_images_num(name):
     print "get_images_num", name
-    if (name not in person_images):
+    if (name not in person_images and name not in feature_data_set):
         return {'l':0, 'r':0, 'c':0}
+    elif (name not in person_images and name in feature_data_set):
+        return {'l':5, 'r':5, 'c':10}
     else:
         return {'l':len(person_images[name]["Left"]), 'r':len(person_images[name]["Right"]),
                 'c':len(person_images[name]["Center"])}
@@ -76,11 +78,11 @@ def __training_thread(name, callback):
         person_features[pos] = [np.mean(extract_feature.get_features(
                                          person_images[name][pos]),axis=0).tolist()]
     if (feature_data_set is not None):
-        del person_images[name]
         feature_data_set[name] = person_features;
         f = codecs.open('./models/facerec_128D.txt', 'w', 'utf-8');
         f.write(json.dumps(feature_data_set))
         f.close()
+        del person_images[name]
     if callback:
         callback(name)
 
