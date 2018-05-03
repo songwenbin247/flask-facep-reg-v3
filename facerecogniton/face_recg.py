@@ -265,23 +265,23 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
                 total_cnt += 1
                 false_neg_cnt += (svm_pred==-1)
                 #if (dist < (meta.mean + 1.0*np.sqrt(meta.var))):
-                if (svm_pred == 1) or  (dist < (meta.mean + 2.0*np.sqrt(meta.var))):
+                if (svm_pred == 1) or  (dist < (meta.mean - 2.0*np.sqrt(meta.var))):
                     #print('cold pred passd')
                     hot_faces.update(knn_label, face_locations[i])
                     regRes.append(knn_label)
                 else:
                     #print('cold pred failed')
                     #print('dist=%f pred=%d, total_cnt=%d, false_neg_cnt=%d, rate=%f' %(dist, svm_pred, total_cnt, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt))
-                    regRes.append("Unknown")
+                    #regRes.append("Unknown")
+                    regRes.append(" ")
 
         else:
-            regRes.append("Unknown")
+            #regRes.append("Unknown")
+            regRes.append(" ")
 
-        meta_th = meta.mean + 1.0*np.sqrt(meta.var)
-
-        print('ret=[%s], cnt=%d, knn_dist=%f, false_neg=%d, rate=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s'
+        print('ret=[%s], cnt=%d, knn_dist=%1.3f, false_neg=%d, rate=%1.3f, gaus_th=%1.3f/%1.3f, gaus_lhs=%1.3f, gaus_rhs=%1.3f, knn_pred=%s'
             %(regRes, total_cnt, dist, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt,
-             gaus_th, gaus_th0, meta_th,
+             gaus_th, gaus_th0,
               gaus_lhs, gaus_rhs, knn_label))
 
     return regRes
