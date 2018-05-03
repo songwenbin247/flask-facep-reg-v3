@@ -54,11 +54,12 @@ var_inter  = 0.01
 N_inter = 0
 gaus_th = 0
 
-gaus_pdf_ratio = 1.0
+gaus_pdf_ratio = 5
 gaus_rhs = 0
+svm_nu =0.02
 
 #perfmon variables
-total_cnt = 0
+total_cnt = 1
 false_pos_cnt = 0
 false_neg_cnt = 0
 
@@ -220,6 +221,7 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
     global total_cnt, false_pos_cnt, false_neg_cnt
     global personal_meta
 
+
     regRes = []
     for (i,features_128D) in enumerate(features_arr):
         returnRes = " "
@@ -229,7 +231,6 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
             return regRes
         #
 
-        total_cnt += 1
         #print(KNN_model.predict_proba([features_128D]))
         (dist, ind) = KNN_model.kneighbors([features_128D], n_neighbors=1, return_distance=True)
         knn_label = KNN_model.predict([features_128D])[0]
@@ -243,33 +244,44 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 
 
         meta = personal_meta[knn_label]
-        svm_pred = meta.svm.predict([features_128D])
+        #svm_pred = meta.svm.predict([features_128D])
+        #decision = meta.svm.decision_function([features_128D])
+
+        svm_pred = meta.svm.predict(dist)
+
+
         if (gaus_lhs < gaus_rhs) :
         #if (gaus_lhs < gaus_rhs) and (svm_pred == 1) :
+
             #face filtering
             (isHot, isFull) = hot_faces.isHot(knn_label, face_locations[i])
+            #isHot = 0
             if isHot:
                 regRes.append(knn_label)
                 #print "person is hot"
                 if not isFull:
                     hot_faces.update(knn_label, face_locations[i])
             else:
+                total_cnt += 1
+                false_neg_cnt += (svm_pred==-1)
                 #if (dist < (meta.mean + 1.0*np.sqrt(meta.var))):
-                if (svm_pred == 1):
-                    print('cold pred passd')
+                if (svm_pred == 1) or  (dist < (meta.mean + 2.0*np.sqrt(meta.var))):
+                    #print('cold pred passd')
                     hot_faces.update(knn_label, face_locations[i])
                     regRes.append(knn_label)
                 else:
-                    print('cold pred failed')
+                    #print('cold pred failed')
+                    #print('dist=%f pred=%d, total_cnt=%d, false_neg_cnt=%d, rate=%f' %(dist, svm_pred, total_cnt, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt))
                     regRes.append("Unknown")
 
         else:
             regRes.append("Unknown")
 
         meta_th = meta.mean + 1.0*np.sqrt(meta.var)
-        print('ret=[%s], cnt=%d, knn_dist=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s'
-            %(regRes, total_cnt, dist,
-              gaus_th, gaus_th0, meta_th,
+
+        print('ret=[%s], cnt=%d, knn_dist=%f, false_neg=%d, rate=%f, gaus_th=%f/%f, init_th=%f,  gaus_lhs=%f, gaus_rhs=%f, knn_pred=%s'
+            %(regRes, total_cnt, dist, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt,
+             gaus_th, gaus_th0, meta_th,
               gaus_lhs, gaus_rhs, knn_label))
 
     return regRes
@@ -278,7 +290,7 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
 def estimate_feature_dist():
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_rhs, gaus_th, gaus_th0, gaus_rhs, gaus_pdf_ratio
-    global personal_metadata
+    global personal_metadata, svm_nu
 
     for i in range(len(feature_data_set.keys())):
 
@@ -302,18 +314,17 @@ def estimate_feature_dist():
             n += 1
 
 
-        #train a one-class SVM
-        model = OneClassSVM()
-        model = model.fit(vec)
 
         m = 0
         m_new = 0
         var = 0
         n = 0
         var_new =0
+        d_sample=[]
         for v in vec:
 
             d = np.sqrt(np.sum(np.square(v - personal_meta[id].centroid)))
+            d_sample.append([d])
 
             # update mean, variance and count
             mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
@@ -326,6 +337,13 @@ def estimate_feature_dist():
             var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
             m = m_new
             n = n + 1
+
+        #train a one-class SVM
+        #model = OneClassSVM(nu=0.05, kernel="rbf", gamma=0.3)
+        #model = model.fit(vec)
+
+        model = OneClassSVM(nu=svm_nu, kernel="rbf", gamma=0.3)
+        model = model.fit(d_sample)
 
         personal_meta[id].mean = m
         personal_meta[id].var = var
@@ -430,7 +448,7 @@ def get_names():
     return names
 
 def update_feature_dist(name, personal_features):
-    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
+    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, svm_nu
 
     vec= np.array([])
 
@@ -449,9 +467,6 @@ def update_feature_dist(name, personal_features):
         centroid = (n * centroid + v) /(n+1)
         n += 1
 
-    #train a one-class SVM
-    model = OneClassSVM()
-    model = model.fit(vec)
 
 
     m = 0
@@ -460,9 +475,11 @@ def update_feature_dist(name, personal_features):
     n = 0
     var_new =0
 
+    d_sample=[]
     for v in vec:
 
         d = np.sqrt(np.sum(np.square(v - centroid)))
+        d_sample.append([d])
 
         # update mean, variance and count
         mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
@@ -476,6 +493,9 @@ def update_feature_dist(name, personal_features):
         m = m_new
         n = n + 1
 
+    #train a one-class SVM
+    model = OneClassSVM(nu=svm_nu, kernel="rbf", gamma=0.3)
+    model = model.fit(d_sample)
 
     #add it to personal metadata
     id = name
