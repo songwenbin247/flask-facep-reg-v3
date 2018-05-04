@@ -3,6 +3,7 @@ from multiprocessing import Process, Queue, Lock, Manager
 import threading, time
 import numpy as np
 import paho.mqtt.client as mqtt
+import cv2
 
 
 Global = Manager().Namespace()
@@ -56,6 +57,19 @@ class FaceRecognitonProcess(Process):
 
         print("Face recognition engine initialized")
         print("Please open browser and visite https://[board-ip]:5000/")
+        for i in range(124):
+            fname ='/home/b42705/facerecog_demo/songwb/name'+ str(i) + '.jpg'
+            inFrame = cv2.imread(fname, 1)
+            face_recg.recog_process_frame_offline(i, inFrame)
+
+        exit(0)
+
+    def run1(self):
+        import face_recg as face_recg
+        face_recg.init_engine(self.serverip)
+
+        print("Face recognition engine initialized")
+        print("Please open browser and visite https://[board-ip]:5000/")
         while (1):
 #            try:
                 if self.cmdq.full():
@@ -104,8 +118,10 @@ class FaceRecognitonProcess(Process):
                     self.cmdretq.put(rets)
                 elif self.frameq.empty() != True:
                     inFrame= self.reciveFrame()
+
                     if inFrame is None:
                         continue
+
                     if self.training == 1:
                         rets = face_recg.train_process_people(inFrame)
                         if len(rets[0]) == 1 and rets[0][0]["pos"] == "Center":
