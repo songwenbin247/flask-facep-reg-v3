@@ -10,7 +10,7 @@ import cv2
 import os
 
 class MTCNNDetect(object):
-    def __init__(self, model_path = "models", threshold = [0.6, 0.7, 0.7], factor = 0.709, scale_factor = 1):
+    def __init__(self, model_path = "models", threshold = [0.6, 0.7, 0.7], factor = 0.709, scale_factor = 1, minsize=20):
         '''
         :param face_rec_sess: FaceRecSession
         :param threshold: detection threshold
@@ -20,6 +20,7 @@ class MTCNNDetect(object):
         self.threshold = threshold
         self.factor = factor
         self.scale_factor = scale_factor;
+        self.minsize = minsize
         with tf.Graph().as_default(), tf.device('/cpu:0'):
             print("Loading Face detection model")
             self.sess = tf.Session()
@@ -47,9 +48,8 @@ class MTCNNDetect(object):
 
 
 
-    def detect_face(self, img, minsize):
+    def detect(self, img ):
         # im: input image
-        # minsize: minimum of faces' size
         if(self.scale_factor > 1):
             img = cv2.resize(img,(int(len(img[0])/self.scale_factor), int(len(img)/self.scale_factor)))
         factor_count = 0
@@ -58,7 +58,7 @@ class MTCNNDetect(object):
         h = img.shape[0]
         w = img.shape[1]
         minl = np.amin([h, w])
-        m = 12.0 / minsize
+        m = 12.0 / self.minsize
         minl = minl * m
         # creat scale pyramid
         scales = []
@@ -168,7 +168,17 @@ class MTCNNDetect(object):
             points)  # points is stored in a very weird datastructure, this transpose it to process eaiser
         rects = [(max(0,(int(rect[0]))) * self.scale_factor,max(0,int(rect[1])) * self.scale_factor,
                           int(rect[2] - rect[0]) * self.scale_factor,int(rect[3] - rect[1]) * self.scale_factor) for rect in total_boxes]
-        return rects, simple_points * self.scale_factor
+
+        landmarks = simple_points * self.scale_factor
+        newlands = []
+        for landmark in landmarks:
+            shape = []
+            for k in range(int(len(landmark) / 2)):
+                shape.append(landmark[k])
+                shape.append(landmark[k + 5])
+            newlands.append(shape)
+        print rects
+        return rects, newlands
 
 
 def layer(op):

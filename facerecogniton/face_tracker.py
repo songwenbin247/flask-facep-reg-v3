@@ -1,5 +1,5 @@
 SCORE_MAX_COUNT = 4
-TRACE_PIXELS = 20
+TRACE_PIXELS = 40
 FRAME_KEEP_LIMIT = 10
 FACE_ID_MAX = 1000
 
@@ -11,7 +11,7 @@ class FaceWindow:
         self.frame_seq = frame_seq
         self.scores = []
         self.name = None
-        self.unknow_count = 0
+        self.recog_count = 0
         self.phash = None
 
     def add_score(self, score):
@@ -25,6 +25,7 @@ class FaceWindow:
     def set_name(self, name):
         if name is not None and name != " ":
             self.name = name
+        self.recog_count += 1
 
     def get_name(self):
         return self.name
@@ -48,6 +49,7 @@ class FaceTracker:
         for face in self.face_list:
             if face.frame_seq + FRAME_KEEP_LIMIT < self.current_frame_count:
                 self.face_list.remove(face)
+                print("remove timeout face")
 
     def get_new_face_id(self):
         self.current_id += 1
@@ -67,6 +69,8 @@ class FaceTracker:
             if (offset_x < TRACE_PIXELS and offset_y < TRACE_PIXELS 
                    and face.frame_seq + FRAME_KEEP_LIMIT >= self.current_frame_count):
                 found.append(face)
+            else:
+                print(offset_x,offset_y,face.frame_seq,FRAME_KEEP_LIMIT,self.current_frame_count)
         if (len(found) != 1):
             if (len(found) > 1):
                 for face in found:
@@ -74,6 +78,7 @@ class FaceTracker:
             face_id = self.get_new_face_id();
             newface = FaceWindow(x, y, face_id, self.current_frame_count)
             self.face_list.append(newface)
+            print("No found")
         else:
             found[0].x = x
             found[0].y = y

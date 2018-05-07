@@ -65,7 +65,7 @@ def recog_process_frame(frames):
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
-        cameras[index].rects, landmarks = face_detect.detect_face(frame,20);#min face size is set to 80x80
+        cameras[index].rects, landmarks = face_detect.detect(frame);#min face size is set to 80x80
         face_tracker[index].increase_frame()
         for (i, rect) in enumerate(cameras[index].rects):
             aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
@@ -142,7 +142,7 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
 def detect_people(frames):
     rets = []
     for frame in frames:
-        rects, landmarks = face_detect.detect_face(frame,20);#min face size is set to 80x80
+        rects, landmarks = face_detect.detect(frame);#min face size is set to 80x80
         ret_per_frame = []
         for (i, rect) in enumerate(rects):
             ret_per_frame.append({"name":"", "rect":rect, "pos":"None"})
@@ -251,7 +251,7 @@ def recod_finish_Server(callback):
 
 def train_process_people(frames):
     frame = frames[0]
-    rects, landmarks = face_detect.detect_face(frame, 20);
+    rects, landmarks = face_detect.detect(frame);
     ret_per_frame = []
     rets = []
     if (len(rects) == 1):

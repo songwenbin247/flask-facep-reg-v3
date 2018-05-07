@@ -18,9 +18,9 @@ class AlignCustom(object):
         pass
     
     def getPos(self, points):
-        if abs(points[0] - points[2]) / abs(points[1] - points[2]) > 2:
+        if abs(points[0] - points[4]) / abs(points[2] - points[4]) > 2:
             return "Right";
-        elif abs(points[1] - points[2]) / abs(points[0] - points[2]) > 2:
+        elif abs(points[2] - points[4]) / abs(points[0] - points[4]) > 2:
             return "Left";
         return "Center"
 
@@ -98,7 +98,7 @@ class AlignCustom(object):
 
         return tran_m, tran_b
 
-    def align(self, desired_size, img, landmarks, padding=0.1):
+    def align(self, desired_size, img, shape, padding=0.1):
         """
         Align face in BGR format.
         :param size: size image
@@ -110,11 +110,6 @@ class AlignCustom(object):
         :return pos: position of face
         :rtype pos: 'Left', 'Center', 'Right'
         """
-        shape = []
-        for k in range(int(len(landmarks) / 2)):
-            shape.append(landmarks[k])
-            shape.append(landmarks[k + 5])
-
         if padding > 0:
             padding = padding
         else:
@@ -159,4 +154,4 @@ class AlignCustom(object):
         rot_mat[1][2] += ey
 
         chips = cv2.warpAffine(img, rot_mat, (desired_size, desired_size))
-        return chips, self.getPos(landmarks)
+        return chips, self.getPos(shape)

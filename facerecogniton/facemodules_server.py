@@ -45,7 +45,7 @@ def training_proframe(name, aligned_frame, pos):
 
 def training_proframe_detect(name, frame):
     print "training_proframe_detect", name
-    rects, landmarks = face_detect.detect_face(frame, 20);
+    rects, landmarks = face_detect.detect(frame);
     print rects,landmarks
     if (len(rects) == 1):
         aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
