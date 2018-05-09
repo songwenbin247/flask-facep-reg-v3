@@ -178,7 +178,7 @@ def recog_process_frame(frames):
         return rets
 
     features_arr = extract_feature.get_features(aligns)
-    recog_data = findPeople(0, face_locations, features_arr, positions);
+    recog_data = findPeople(face_locations, features_arr, positions);
 
 
     j = 0
@@ -239,7 +239,7 @@ def train_LOF():
 
 
 
-def findPeople(fid, face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
+def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_th, gaus_th0, gaus_rhs
     global total_cnt, false_pos_cnt, false_neg_cnt
@@ -308,7 +308,7 @@ def findPeople(fid, face_locations, features_arr, positions, thres = 0.6, percen
             regRes.append(" ")
 
         print('fid=%d, ret=[%s], cnt=%d, knn_dist=%1.3f/%1.3f/%d, false_neg=%d, rate=%1.3f, gaus_th=%1.3f/%1.3f, gaus_lhs=%1.3f, gaus_rhs=%1.3f, knn_pred=%s'
-            %(fid, regRes, total_cnt, dist, decision, svm_pred, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt,
+            %( 0, regRes, total_cnt, dist, decision, svm_pred, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt,
              gaus_th, gaus_th0,
               gaus_lhs, gaus_rhs, knn_label))
 
