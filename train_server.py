@@ -98,11 +98,8 @@ class TrainModelsWX(Resource):
         mqttclient.publish("NXP_CMD_MODULE_UPDATE", name)
 
     def get(self):
-        print "=======start======="
         args = parser.parse_args()
-        print args
         name = args['id'].decode('utf-8')
-        print "=======end======="
         state = facemodules.get_train_status(name)
         return {'state': state}, 200
 
@@ -116,33 +113,31 @@ class TrainModelsWX(Resource):
         return {'state':'SUCCESS'}, 201
 
     def post(self):
-        try:
-            print request.form
-            name = request.form['id'].decode('utf-8')
-            img_num = facemodules.get_images_num(name)
-            if(img_num['l'] >= 5 and img_num['r'] >= 5 and img_num['c'] >= 10):
-                raise Exception()
+       print request.form
+       name = request.form['id'].decode('utf-8')
 
-            pif=StringIO.StringIO()
-            request.files['file'].save(pif)
-            pif.seek(0)
-            pili = Image.open(pif)
-            frame = np.array(pili)
+       pif=StringIO.StringIO()
+       request.files['file'].save(pif)
+       pif.seek(0)
+       pili = Image.open(pif)
+       frame = np.array(pili)
 
-            facemodules.training_proframe_detect(name, frame)
-            img_num = facemodules.get_images_num(name)
-            if(img_num['l'] >= 5 and img_num['r'] >= 5 and img_num['c'] >= 10):
-                facemodules.training_finish(name, self.__send_train_finish)
-        except Exception as e:
-            pass
+       ret = facemodules.training_proframe_detect(name, frame)
+       img_num = facemodules.get_images_num(name)
+       if(ret and img_num['l'] == 10 and img_num['r'] == 10 and img_num['c'] == 10):
+           facemodules.training_finish(name, self.__send_train_finish)
 
-        print img_num
-        return img_num, 201
+       return img_num, 201
 
 ##
 ## Actually setup the Api resource routing here
 ##
 api.add_resource(TrainModels, '/train')
 api.add_resource(TrainModelsWX, '/')
+
+fdir = os.path.dirname(os.path.realpath(__file__))
+tls_crt = os.path.join(fdir, 'tls', '214668766350335.pem')
+tls_key = os.path.join(fdir, 'tls', '214668766350335.key')
+
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8383, debug=False)
+    app.run(host='0.0.0.0', port=443, threaded=True, ssl_context=(tls_crt, tls_key))

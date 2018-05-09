@@ -49,8 +49,12 @@ def training_proframe_detect(name, frame):
     print rects,landmarks
     if (len(rects) == 1):
         aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
-        person_images[name][face_pos].append(aligned_frame)
-    return True
+
+        if name in person_images and len(person_images[name][face_pos]) < 10:
+            person_images[name][face_pos].append(aligned_frame)
+            return True
+
+    return False
 
 def get_train_status(name):
     if (name in feature_data_set):
@@ -65,7 +69,7 @@ def get_images_num(name):
     if (name not in person_images and name not in feature_data_set):
         return {'l':0, 'r':0, 'c':0}
     elif (name not in person_images and name in feature_data_set):
-        return {'l':5, 'r':5, 'c':10}
+        return {'l':10, 'r':10, 'c':10}
     else:
         return {'l':len(person_images[name]["Left"]), 'r':len(person_images[name]["Right"]),
                 'c':len(person_images[name]["Center"])}

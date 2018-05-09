@@ -88,6 +88,10 @@ def video_feed():
         return Response(gen(Camera()),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/.well-known/pki-validation/fileauth.txt')
+def txt_index():
+    return render_template('fileauth.txt')
+
 if __name__ == '__main__':
     websocket.startWebSocketServer(serverip)
     #app.run(host='0.0.0.0', threaded=True)
