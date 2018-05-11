@@ -38,10 +38,16 @@ import ntpath
 from scipy.spatial import distance
 
 from face_meta import *
+from hot_pool import Filter
+from hot_pool import Anormal
+from hot_pool import canvas_show
 
+
+filter = Filter(3)
 hot_faces= hot_pool.HotFaces(10)
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
+anormal = Anormal()
 extract_feature = FaceFeature()
 face_detect = MTCNNDetect(scale_factor=3); #scale_factor, rescales image for faster detection
 feature_data_set = dict()
@@ -73,6 +79,11 @@ KNN_model = None
 vec_global = None
 labels_global=None
 CAMERA_NUMBER = 4
+
+
+
+
+canvas_disc = canvas_show(60, 0, 1.5)
 
 face_tracker = []
 for i in range(CAMERA_NUMBER):
@@ -118,40 +129,28 @@ class CameraRouad:
         self.rets = []
         self.rects = []
 
-def recog_process_frame_offline(fid, frame):
-    cameras = []
-    rets = []
-    aligns = []
-    positions = []
-    face_locations = []
-
-    rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
-
-    if(len(rects)>0):
-        aligned_face, face_pos = aligner.align(160,frame,landmarks[0])
-        face_locations = np.array(rects[0])
-        features_arr = extract_feature.get_features([aligned_face])
-        recog_data = findPeople(fid, face_locations, features_arr, [face_pos]);
-    else:
-        print('mtcnn: no face detected')
-
-
-    return rets
-
-
 def recog_process_frame(frames):
     cameras = []
     rets = []
     aligns = []
     positions = []
+    landms= []
     face_locations = []
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
-        cameras[index].rects, landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        cameras[index].rects, cameras[index].landmarks = face_detect.detect_face(frame,40);#min face size is set to 80x80
+        #if landmarks != []:
+            # canvas.up_va(landmarks[0][0])
+            # pis = filter.get_va(landmarks[0][0], landmarks[0][1])
+            # canvas_filter.up_va(pis + 300)
+            # if pis > 3:
+            #     canvas_sw.up_va(400)
+            # else:
+            #     canvas_sw.up_va(300)
         face_tracker[index].increase_frame()
         for (i, rect) in enumerate(cameras[index].rects):
-            aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
+            aligned_face, face_pos = aligner.align(160,frame,cameras[index].landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
             if (1):
@@ -167,6 +166,7 @@ def recog_process_frame(frames):
     for c in cameras:
         aligns += c.aligns
         positions += c.positions
+        landms += c.landmarks.tolist()
         if(len(face_locations)==0):
             face_locations = np.array(c.rects)
         else:
@@ -178,7 +178,7 @@ def recog_process_frame(frames):
         return rets
 
     features_arr = extract_feature.get_features(aligns)
-    recog_data = findPeople(face_locations, features_arr, positions);
+    recog_data = findPeople(face_locations, features_arr,  landms, positions);
 
 
     j = 0
@@ -208,7 +208,7 @@ This function basically does a simple linear search for
 '''
 
 def train_LOF():
-    global LOF_model, KNN_model
+    global KNN_model
     global vec_global, labels_global
 
     labels = np.array([])
@@ -238,12 +238,14 @@ def train_LOF():
     labels_global = labels.tolist()
 
 
-
-def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thres = 97):
+n = 0
+mean_my = 0
+def findPeople(face_locations, features_arr, landmarks ,positions):
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_th, gaus_th0, gaus_rhs
     global total_cnt, false_pos_cnt, false_neg_cnt
     global personal_meta
+    global  n, mean_my
 
 
     regRes = []
@@ -260,172 +262,48 @@ def findPeople(face_locations, features_arr, positions, thres = 0.6, percent_thr
         knn_label = KNN_model.predict([features_128D])[0]
 
 
-        if (N_intra==0):
-            gaus_lhs = 10000
-            gaus_rhs = -1000
-        else:
-            gaus_lhs = np.square(dist-mean_intra)/var_intra - np.square(dist-mean_inter)/var_inter
-            #th = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
-
-
         meta = personal_meta[knn_label]
 
+        canvas_disc.up_va(dist)
 
-        #svm_pred = meta.svm.predict([features_128D])
-        #decision = meta.svm.decision_function([features_128D])
-
-        svm_pred = meta.svm.predict(dist)
-        decision = meta.svm.decision_function(dist)
-
-
-        if (gaus_lhs < gaus_rhs) :
-        #if (gaus_lhs < gaus_rhs) and (svm_pred == 1) :
-
-            #face filtering
-            #(isHot, isFull) = hot_faces.isHot(knn_label, face_locations[i])
-            isHot = 0
-            if isHot:
-                regRes.append(knn_label)
-                #print "person is hot"
-                if not isFull:
-                    hot_faces.update(knn_label, face_locations[i])
-            else:
-                total_cnt += 1
-                false_neg_cnt += (svm_pred==-1)
-                #if (dist < (meta.mean + 0.0*np.sqrt(meta.var))):
-                if (svm_pred == 1) or  (dist < (meta.mean - 2.0*np.sqrt(meta.var))):
-                    #print('cold pred passd')
-                    hot_faces.update(knn_label, face_locations[i])
-                    regRes.append(knn_label)
-                else:
-                    #print('cold pred failed')
-                    #print('dist=%f pred=%d, total_cnt=%d, false_neg_cnt=%d, rate=%f' %(dist, svm_pred, total_cnt, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt))
-                    #regRes.append("Unknown")
-                    regRes.append(" ")
-
+        (isHot, isFull, name) = hot_faces.isHot(knn_label, landmarks[i])
+        know = ""
+        if isHot:
+            regRes.append(name)
+            know = name
+            #print "person is hot"
+            if not isFull:
+                hot_faces.update(name, landmarks[i])
         else:
-            #regRes.append("Unknown")
-            regRes.append(" ")
-
-        print('fid=%d, ret=[%s], cnt=%d, knn_dist=%1.3f/%1.3f/%d, false_neg=%d, rate=%1.3f, gaus_th=%1.3f/%1.3f, gaus_lhs=%1.3f, gaus_rhs=%1.3f, knn_pred=%s'
-            %( 0, regRes, total_cnt, dist, decision, svm_pred, false_neg_cnt, (false_neg_cnt+0.0)/total_cnt,
-             gaus_th, gaus_th0,
-              gaus_lhs, gaus_rhs, knn_label))
-
+            if (dist < 0.35): #(meta.mean - 0*meta.var)):
+                    print('person is going to hot')
+                    hot_faces.update(knn_label, landmarks[i])
+                    regRes.append(knn_label)
+                    know = knn_label
+            else:
+                    regRes.append("Unknown")
+                    know = "Unknown"
+        print "know = %s name = %s mean/var/va = %f %f %f disc = %f " % (know, knn_label, meta.mean, meta.var, meta.mean - 0*meta.var, dist)
     return regRes
 
 
 def estimate_feature_dist():
     global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter
     global gaus_rhs, gaus_th, gaus_th0, gaus_rhs, gaus_pdf_ratio
-    global personal_metadata, svm_nu, svm_gamma, svm_kernel
+    global personal_metadata
 
-    for i in range(len(feature_data_set.keys())):
-
-        # estimate intra-subject distribution
-        id = feature_data_set.keys()[i];
-        #print('id=%s' %(id))
+    for id in feature_data_set.keys():
         personal_meta[id] = FaceMeta()
-
-        vec= np.array([])
+        vecs = []
         for pos in ['Left','Center', 'Right']:
-            personal_data = feature_data_set[id][pos];
-            if(len(personal_data) > 0):
-                if (len(vec) == 0):
-                    vec = np.array(personal_data)
-                else:
-                    vec = np.concatenate((vec, np.array(personal_data)), axis=0)
+            vecs += feature_data_set[id][pos]
+        vecs = np.array(vecs)
+        centroid = np.mean(vecs, axis=0)
 
-        personal_meta[id].centroid = np.mean(vec, axis=0)
-
-        m = 0
-        m_new = 0
-        var = 0
-        n = 0
-        var_new =0
-        d_sample=[]
-        for v in vec:
-
-            d = distance.euclidean(v, personal_meta[id].centroid)
-            d_sample.append([d])
-
-            # update mean, variance and count
-            mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
-            var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
-            mean_intra = mean_intra_new
-            N_intra = N_intra+1
-
-            #subject-specific mean and variance estimate
-
-            m_new = (n*m + d)/(n+1)
-            var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
-            m = m_new
-            n = n + 1
-
-
-        #train a one-class SVM
-        #model = OneClassSVM(nu=0.05, kernel="rbf", gamma='auto')
-        #model = model.fit(vec)
-
-        model = OneClassSVM(nu=svm_nu, kernel=svm_kernel, gamma=svm_gamma, degree=4)
-        model = model.fit(d_sample)
-
-        svm_region = []
-        y_prev = -1
-        for i in range(1000):
-            y_cur = model.predict(i*0.001)
-            if ((y_cur==1) and (y_prev == -1)) or ((y_cur==-1) and (y_prev == 1)):
-                svm_region.append(i*0.001)
-            y_prev = y_cur
-
-        if (len(svm_region)==1):
-            svm_region.append(1)
-
-        personal_meta[id].mean = m
-        personal_meta[id].var = var
-        personal_meta[id].svm = model
-        personal_meta[id].svm_region = svm_region
-
-
-
-
-        #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-
-    ## Estimate inter-subject distribution
-    for i in range(len(feature_data_set.keys())):
-        id1 = feature_data_set.keys()[i];
-        v1 = personal_meta[id1].centroid
-        for j in range(i+1, len(feature_data_set.keys())):
-
-            id2 = feature_data_set.keys()[j];
-            v2 = personal_meta[id2].centroid
-            d = distance.euclidean(v1, v2)
-            #print('id=%s, d=%1.4f' %(id, d))
-
-            mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
-
-            # update mean, variance and count
-            var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
-            mean_inter = mean_inter_new
-            N_inter = N_inter+1
-
-            #print('(%d,%d), N_inter=%d, d=%f, mean=%f, var=%f '%(i,j, N_inter, d, mean_inter, var_inter))
-
-    gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
-    a = var_inter - var_intra
-    b = -2*(mean_intra * var_inter - mean_inter*var_intra)
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs*var_inter*var_intra
-    gaus_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-
-    gaus_rhs0 = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs0*var_inter*var_intra
-    gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-
-    print('a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
-    print('N_intra=%d, mean=%f, var=%f, sigma=%f'%(N_intra, mean_intra, var_intra, np.sqrt(var_intra)))
-    print('N_inter=%d, mean=%f, var=%f, sigma=%f '%(N_inter, mean_inter, var_inter, np.sqrt(var_inter)))
-
-
+        personal_meta[id].centroid = centroid
+        dists = np.sqrt(np.sum(np.square(vecs - centroid), axis=1))
+        personal_meta[id].mean = np.mean(dists)
+        personal_meta[id].var = np.std(dists)
 
 def detect_people(frames):
     rets = []
@@ -487,99 +365,15 @@ def get_names():
     return names
 
 def update_feature_dist(name, personal_features):
-    global  mean_intra, var_intra, N_intra, mean_inter, var_inter, N_inter, svm_nu, svm_gamma, svm_kernel
+    estimate_feature_dist()
 
-    vec= np.array([])
-
-    # estimate intra-subject distribution
-    for pos in ['Left','Center', 'Right']:
-        personal_data = personal_features[pos];
-        if (len(vec) == 0):
-            vec = personal_data
-        else:
-            vec = np.concatenate((vec, personal_data), axis=0)
-
-    #Calc cluster centroid
-    centroid = np.mean(vec, axis=0)
-
-    #Calc inter and intra subject distribution
-    m = 0
-    m_new = 0
-    var = 0
-    n = 0
-    var_new =0
-
-    d_sample=[]
-    for v in vec:
-
-        d = distance.euclidean(v, centroid)
-        d_sample.append([d])
-
-        # update mean, variance and count
-        mean_intra_new = (N_intra * mean_intra +  d)/(N_intra+1)
-        var_intra = (N_intra* var_intra + N_intra * np.square(mean_intra_new - mean_intra)  + np.square(d - mean_intra_new) )/(1+N_intra)
-        mean_intra = mean_intra_new
-        N_intra = N_intra+1
-
-        #subject-specific mean and variance estimate
-        m_new = (n*m + d)/(n+1)
-        var = (n*var + n*np.square(m_new - m) + np.square(d - m_new))/(n+1)
-        m = m_new
-        n = n + 1
-
-    #train a one-class SVM
-    model = OneClassSVM(nu=svm_nu, kernel=svm_kernel, gamma=svm_gamma)
-    model = model.fit(d_sample)
-
-    #add it to personal metadata
-    id = name
-    personal_meta[id] = FaceMeta()
-    personal_meta[id].mean = m
-    personal_meta[id].var = var
-    personal_meta[id].svm = model
-    personal_meta[id].centroid = centroid
-
-
-
-    print('[New] id=%s, m=%f, var=%f, sigma=%f' %(id, m, var, np.sqrt(var)))
-
-    #print('N_intra=%d, mean=%f, var=%f '%(N_intra, mean_intra, var_intra))
-
-    v1 = personal_meta[id].centroid
-    for v2 in vec_global:
-        d = distance.euclidean(v1, v2)
-
-        mean_inter_new = (N_inter * mean_inter +  d)/(N_inter+1)
-
-        # update mean, variance and count
-        var_inter = (N_inter* var_inter + N_inter * np.square(mean_inter_new - mean_inter)  + np.square(d - mean_inter_new) )/(1+N_inter)
-        mean_inter = mean_inter_new
-        N_inter = N_inter+1
-
-            #print('N_inter=%d, mean=%f, var=%f '%(N_inter, mean_inter, var_inter))
-
-    gaus_rhs = (-2)*np.log(gaus_pdf_ratio * np.sqrt(var_intra/var_inter))
-    a = var_inter - var_intra
-    b = -2*(mean_intra * var_inter - mean_inter*var_intra)
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs*var_inter*var_intra
-    gaus_th = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-
-    gaus_rhs0 = (-2)*np.log(1.0 * np.sqrt(var_intra/var_inter))
-    c = mean_intra*mean_intra*var_inter - mean_inter*mean_inter*var_intra - gaus_rhs0*var_inter*var_intra
-    gaus_th0 = (-b+ np.sqrt(b*b-4*a*c))/(2*a)
-
-    print('[new] N_intra=%d, mean=%f, var=%f, sigma=%f'%(N_intra, mean_intra, var_intra, np.sqrt(var_intra)))
-    print('[new[ N_inter=%d, mean=%f, var=%f, sigma=%f'%(N_inter, mean_inter, var_inter, np.sqrt(var_inter)))
-
-    print('[new] a=%f, b=%f, c=%f, gaus_th=%f/%f, gaus_rhs=%f' %(a,b,c,gaus_th, gaus_th0, gaus_rhs))
 
 
 def save_feature_Local(name, person_features):
 
     #update estimate using existing dataset
-    update_feature_dist(name, person_features);
-
     feature_data_set[name] = person_features;
+    update_feature_dist(name, person_features);
 
     #train the classifier using updated features
     train_LOF();
@@ -596,7 +390,8 @@ def __training_thread_local(callback):
     person_features = {"Left" : [], "Right": [], "Center": []};
     for pos in person_imgs:
         #person_features[pos] = [np.mean(extract_feature.get_features( person_imgs[pos]),axis=0).tolist()]
-        person_features[pos] = extract_feature.get_features(person_imgs[pos]).tolist()
+        list_= extract_feature.get_features(person_imgs[pos]).tolist()
+        person_features[pos] =  anormal.filter(list_).tolist()
 
     save_feature_Local(person_name, person_features)
     print("Stop training")
@@ -636,17 +431,19 @@ def recod_finish_Server(callback):
     t = threading.Thread(target=__training_thread_server, args=(callback,))
     t.start()
     return True
-
+import time
 def train_process_people(frames):
     frame = frames[0]
     rects, landmarks = face_detect.detect_face(frame, 20);
     ret_per_frame = []
     rets = []
     if (len(rects) == 1):
-        aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
-        if (len(person_imgs[face_pos]) < 20):
+        pis = filter.get_va(landmarks[0][0], landmarks[0][1])
+        if pis > 3:
+            aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
+            #if (len(person_imgs[face_pos]) < 20):
             person_imgs[face_pos].append(aligned_frame)
-        ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
+            ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
     rets.append(ret_per_frame)
     return rets
 
@@ -699,25 +496,26 @@ def load_modules_Local():
     global personal_meta
     fdb = FeaturesDB()
     names = fdb.get_names()
-
     for name in names:
         fl = [x for x in fdb.features(name, 'Left')]
         fr = [x for x in fdb.features(name, 'Right')]
         fc = [x for x in fdb.features(name, 'Center')]
         feature_data_set[name] = {'Left': fl, 'Right': fr, 'Center': fc}
 
+    for name in feature_data_set.keys():
+        for pos in feature_data_set[name].keys():
+            feature_data_set[name][pos] = anormal.filter(feature_data_set[name][pos]).tolist()
+
+    for name in feature_data_set.keys():
+        _len = 0
+        for feas in feature_data_set[name].values():
+            _len += len(feas)
+        if _len == 0:
+            del feature_data_set[name]
+
     if len(feature_data_set):
         estimate_feature_dist()
         train_LOF()
-
-    for id in personal_meta.keys():
-        svm_region = personal_meta[id].svm_region
-        print('id=%s, m=%1.3f, var=%1.3f, sigma=%1.3f, svm_region=%s, sigma*[%1.3f, %1.3f]'
-                %(id, personal_meta[id].mean, personal_meta[id].var, np.sqrt( personal_meta[id].var ),
-                    svm_region,
-                    (svm_region[0] - personal_meta[id].mean)/np.sqrt( personal_meta[id].var),
-                    (svm_region[1] - personal_meta[id].mean)/np.sqrt( personal_meta[id].var)
-                 ))
 
 
 load_modules = load_modules_Local

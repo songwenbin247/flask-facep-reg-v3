@@ -35,9 +35,65 @@ class LRUCache(FIFOCache):
         self.move_to_end(item)
         return self._store[item]
 
+from matplotlib import pyplot as plt
+class canvas_show():
+    def __init__(self, x_max, y_min = None, y_max = None):
+        self.x_max = x_max
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(1, 1, 1)
+        self.lines, = self.ax.plot([], [], '-')
+        self.ax.set_autoscaley_on(True)
+        self.ax.set_xlim(0, self.x_max)
+        if y_min is not None and y_max is not None:
+            self.ax.set_ylim(y_min, y_max)
+        self.fig.show()
+        self.y = [0] * self.x_max
+        self.lines.set_xdata(range(0, self.x_max, 1))
+
+    def up_va(self, va):
+        self.y = self.y[1: self.x_max]
+        self.y.append(va)
+        self.lines.set_ydata(self.y)
+        self.ax.relim()
+        self.ax.autoscale_view()
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+class Filter():
+    def __init__(self, max_size=3):
+        self.vallF =FIFOCache(max_size)
+        self.valhF = FIFOCache(max_size)
+        self.i = 0
+
+    def get_va(self, vall,valh ):
+        xl = [self.vallF.get(i) for i in self.vallF.keys()]
+        xh = [self.valhF.get(i) for i in self.valhF.keys()]
+        self.vallF.update((self.i, vall))
+        self.valhF.update((self.i, valh))
+        self.i += 1
+        if xl != []:
+             disl = abs(vall - np.mean(xl))
+             dish = abs(valh - np.mean(xh))
+             return abs(dish - disl)
+        else:
+            return 0
+
+
+class Anormal():
+    def __init__(self, threshold = 0.45):
+        self.threshold = threshold
+
+    def filter(self, feas, threshold = None):
+        if threshold is None:
+            threshold = self.threshold
+
+        feas = np.array(feas)
+        mean_feas = np.mean(feas, axis=0)
+        feas_dis = np.sqrt(np.sum(np.square(feas - mean_feas), axis=1))
+        return feas[feas_dis < threshold]
 
 # { time: {
-#          'rect': [px,py,lx,ly],
+#          'landmark': [nx,ny],
 #           'pos': 'Left'
 #           },
 # }
@@ -47,7 +103,7 @@ class PositionStream():
         self.fifo = FIFOCache(2)
 
     def push(self, rect, pos):
-        self.fifo.update((time.time(), {'rect': rect, 'pos': pos}))
+        self.fifo.update((time.time(), {'landmark': rect, 'pos': pos}))
 
     def resize(self, max_frame):
         self.fifo.max_size = max_frame
@@ -55,7 +111,7 @@ class PositionStream():
     def position(self):
         for k in self.fifo.keys():
             posi = self.fifo.get(k)
-            yield [k, posi['rect']]
+            yield [k, posi['landmark']]
 
 # {name: {
 #       'time': time,
@@ -63,23 +119,32 @@ class PositionStream():
 #       }
 # }
 class HotFaces():
-    timeout = 5.0
+    timeout = 1.0
 
     def __init__(self, max_person):
         self.hot_pool = LRUCache(max_person)
+        self.canvas_offset = canvas_show(50, -200, 200)
 
-    def update(self, name, rect, pos=None):
+    def update(self, name, landmark, pos=None):
         time_new = time.time()
         if name not in self.hot_pool.keys():
             posi = PositionStream()
-            posi.push(rect, pos)
+            posi.push([landmark[2], landmark[7]], pos)
             self.hot_pool.update((name, {'time': time_new, 'PosiStream': posi}))
         else:
-           self.hot_pool.get(name)['time'] = time_new
-           self.hot_pool.get(name)['PosiStream'].push(rect, pos)
+            tposi = self.hot_pool.get(name)
+            posi = tposi['PosiStream']
+            if time_new - tposi['time'] > HotFaces.timeout:  # the time is greater than 1s since the last update.
+                self.hot_pool.pop(name)
+            else:
+                tposi['time'] = time_new
+                posi.push([landmark[2], landmark[7]], pos)
 
-    def isHot(self, name, rect, pos=None):
-        time_now = time.time()
+    def remove_person(self, name):
+        if name in self.hot_pool.keys():
+            self.hot_pool.pop(name)
+
+    def __hot_person(self, name, landmark, time_now, pos=None):
         if name not in self.hot_pool.keys():
             #print '*** %s no in pool' % name
             return (False,False)
@@ -97,73 +162,69 @@ class HotFaces():
         tl = [ k[0] for k in posi.position()]
         pl = [ k[1] for k in posi.position()]
         # tl = [time_1, time_2]
-        # pl = [[px1, py1, sx1, sy1], [px2, py2, sx2, sy2]]
-        # px = (px2 - px1)/ (time_2 - time-1) * (time_new - time_2) + px2
-        # py = (py2 - py1) / (time_2 - time - 1) * (time_new - time_2) + py2
+        # pl = [[nx1, ny1], [nx2, ny2]]
+        # px = (nx2 - nx1)/ (time_2 - time-1) * (time_new - time_2) + nx2
+        # py = (ny2 - ny1) / (time_2 - time - 1) * (time_new - time_2) + ny2
         t1 = tl[1] - tl[0]
         t2 = time_now - tl[1]
         px = ((pl[1][0] - pl[0][0]) / t1) * t2 + pl[1][0]
         py = ((pl[1][1] - pl[0][1]) / t1) * t2 + pl[1][1]
         #print("### %f %f %d %d  %f" % (abs(px - rect[0]), abs(py - rect[1]), rect[2], rect[3], t2))
-        dis = np.sqrt( np.square(px - rect[0]) + np.square(py - rect[1]))
-        #if  dis > 350 * t2:
-        if  dis > 700 * t2:
+        dis = np.sqrt( np.square(px - landmark[2]) + np.square(py - landmark[7]))
+        self.canvas_offset.up_va(dis - 450 * t2)
+        if  dis > 450 * t2:
             print ('*** dis = %f, t2=%f' % (dis, t2))
             return (False,False)
-        self.update(name, rect)
+        self.update(name, landmark)
         return (True, True)
-        # if len(re) < 2:
-        #     return (1, '')
-        #
 
-        # def calc_change(vtl):
-        #     ret = []
-        #     if len(vtl) < 2:
-        #         return ret
-        #     prev_v = 0
-        #     prev_t = 0
-        #     i = 0
-        #     for v, t in vtl:
-        #         if i != 0:
-        #             i = 1
-        #             ret.append([(v - prev_v)/(t[i] - prev_t), prev_t])
-        #         prev_v = v
-        #         prev_t = t
-        #     return ret
-        #
-        # # x, y axis position
-        # px_t = [[x[1][0], x[0]] for x in re]
-        # py_t = [[x[1][0], x[1]] for x in re]
-        #
-        # # x, y axis position with test point
-        # px_t_u = px_t[:]
-        # py_t_u = py_t[:]
-        # px_t_u.append([rect[0], time])
-        # py_t_u.append([rect[0], time])
-        #
-        # # x, y axis speed
-        # vx_t = calc_change(px_t_u)
-        # vy_t = calc_change(py_t_u)
-        #
-        # # x, y axis acceleration
-        # ax_t = calc_change(vx_t)
-        # ay_t = calc_change(vy_t)
-        #
-        # vx = [x[0] for x in vx_t]
-        # vy = [x[0] for x in vy_t]
-        # ax = [x[0] for x in ax_t]
-        # ay = [x[0] for x in ay_t]
-        # ret = [0] * 4
-        # self.lm.fit(range(0,len(vx) - 1), vx[:-1])
-        # ret[0] = self.lm.predict([vx[-1]])[0]
-        # self.lm.fit(range(0, len(vy) - 1), vy[:-1])
-        # ret[1] = self.lm.predict([vy[-1]])[0]
-        #
-        # self.lm.fit(range(0, len(ay) - 1), ay[:-1])
-        # ret[2] = self.lm.predict([ay[-1]])[0]
-        # self.lm.fit(range(0, len(ay) - 1), ay[:-1])
-        # ret[3] = self.lm.predict([ay[-1]])[0]
+    def __hot_postion(self,landmark,time_now, pos=None):
 
+        maybe = {}
+        lax = landmark[2]
+        lay = landmark[7]
+        for it in self.hot_pool.keys():
+            tposi = self.hot_pool.get(it)
+            posi = tposi['PosiStream']
+            tl = [k[0] for k in posi.position()]
+            pl = [k[1] for k in posi.position()]
+            if len(tl) !=2:
+                continue
+            # tl = [time_1, time_2]
+            # pl = [[nx1, ny1], [nx2, ny2]]
+            # px = (nx2 - nx1)/ (time_2 - time-1) * (time_new - time_2) + nx2
+            # py = (ny2 - ny1) / (time_2 - time - 1) * (time_new - time_2) + ny2
+            t1 = tl[1] - tl[0]
+            t2 = time_now - tl[1]
+            if t1 > 0.5 or t2 > 0.5:
+                continue
+            px = ((pl[1][0] - pl[0][0]) / t1) * t2 + pl[1][0]
+            py = ((pl[1][1] - pl[0][1]) / t1) * t2 + pl[1][1]
+            maybe[it] = [px, py, t2]
+
+        disc = [((lax - x[0])**2 + (lay - x[1]) **2) for x in maybe.values()]
+        if len(disc) == 0:
+            return None
+        min_disc = min(disc)
+        id = maybe.keys()[disc.index(min_disc)]
+        print "min_disc = %f threshold = %f" % (min_disc,(150 * maybe[id][2]) ** 2)
+        if min_disc > (150 * maybe[id][2]) ** 2:
+            return None
+
+        return maybe.keys()[disc.index(min_disc)]
+
+    def isHot(self, name, landmark, pos=None):
+        time_now = time.time()
+
+        (ishot, isful) = self.__hot_person(name, landmark, time_now, pos)
+
+        if not ishot:
+            name_v = self.__hot_postion(landmark,time_now, pos)
+            if name_v is None:
+                return (False, isful, "")
+            else:
+                return (True, isful, name_v)
+        return (ishot, isful, name)
 
 if __name__ == '__main__':
     a = LRUCache(4)

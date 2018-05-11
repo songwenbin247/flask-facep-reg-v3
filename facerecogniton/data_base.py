@@ -4,7 +4,7 @@ import pickle
 
 class FeaturesDB():
 
-    def __init__(self, db_path='./models/features_128D.db.42p'):
+    def __init__(self, db_path='./models/features_128D.db.42p_bad'):
         def adapt_list(dat):
             return pickle.dumps(dat)
 
@@ -186,16 +186,19 @@ class Batches(FeaturesDB):
 if __name__ == '__main__':
     import numpy as np
     import json
-    fdb= FeaturesDB("../models/features_128D.db")
-    f = open('../models/facerec_128D_12p.txt', 'rb')
-    feature_data_set = json.loads(f.read())
-    f.close()
-    for name in feature_data_set.keys():
-        for p in ['Left', 'Right', 'Center']:
-            fdb.add_features(name, feature_data_set[name][p], p)
+    fdb= FeaturesDB("../models/features_128D.db.42p")
+    # f = open('../models/facerec_128D_12p.txt', 'rb')
+    # feature_data_set = json.loads(f.read())
+    # f.close()
+    # for name in feature_data_set.keys():
+    #     for p in ['Left', 'Right', 'Center']:
+    #         fdb.add_features(name, feature_data_set[name][p], p)
 
+    names = fdb.get_names()
 
-
+    for name in names:
+        if name != 'wenbin song':
+            fdb.del_person(name)
     print 'End'
     # feature_dirc = {}
     # features_all = {}
