@@ -37,7 +37,7 @@ img {
 
 .container .header {
     text-align: center;
-    top: 20;
+    top: 80;
     /*bottom: 330px;*/
     position: absolute;
     right: 0;
@@ -45,13 +45,13 @@ img {
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 10px;
-    width: 1280px;
-    height: 600px;
+    width: 1664px;
+    height: 624px;
     /* overflow-y: scroll; */
 }
 
 .container .content1 {
-    top: 650px;
+    top: 800px;
     bottom: 0;
     position: absolute;
     right: 0;
@@ -64,7 +64,7 @@ img {
 }
 
 .container .content2 {
-    top: 650px;
+    top: 800px;
     bottom: 0;
     position: absolute;
     right: 0;

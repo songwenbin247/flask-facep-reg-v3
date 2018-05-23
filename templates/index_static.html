@@ -29,11 +29,13 @@ limitations under the License.
     </head>
     <body>
         <div class="container">
+            <h3>Face Recognition Based On NXP LS1046A</h3>
             <div class="header" style="visibility:hidden;" id="cameradiv">
                 <video id="videocamera" width="800" height="600" preload="auto"/>
             </div>
             <div class="header" style="visibility:hidden;" id="videodiv">
-                <img src="{{ url_for('video_feed') }}" width="800" height="600">
+                <!--img src="{{ url_for('video_feed') }}" width="1664" height="624"-->
+                <img src="{{ url_for('video_feed') }}" width="1664" height="720">
             </div>
             <div class="header" style="visibility:hidden;" id="canvasdiv">
                 <canvas id="canvasoutput" width="800" height="600"/>

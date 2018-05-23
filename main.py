@@ -23,6 +23,18 @@ if args.dev == 'laptop':
 elif args.dev == 'usb':
     from camera_opencv import *
     print("Using onboard usb camera")
+
+    files = os.listdir('/dev')
+
+    video_source = []
+    for f in files:
+        if f.find('video') == 0:
+            video_source.append(int(f[5:]))
+
+    if len(video_source) == 0:
+        print "No usb camera found"
+        exit(0)
+    Camera.set_video_source(video_source)
 else:
     from camera_opencv import *
     video_source = []

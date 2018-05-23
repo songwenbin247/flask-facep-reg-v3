@@ -18,15 +18,17 @@ def rotate(image, angle, center=None, scale=1.0):
 
 
 class Camera(BaseCamera):
-    video_source = [0]
-    camera_number = 1
-    buffer_count = 7
+    video_source = []
+    camera_number = 0
+    buffer_count = 5
     reg_ret = []
 
     @staticmethod
     def set_video_source(source):
         Camera.video_source = source
         Camera.camera_number = len(source)
+        if Camera.camera_number > 2:
+            Camera.camera_number = 2
 
     @staticmethod
     def set_buffer_count(count):
@@ -40,8 +42,13 @@ class Camera(BaseCamera):
             cameras.append(cv2.VideoCapture(Camera.video_source[i]))
             if not cameras[i].isOpened():
                 raise RuntimeError('Could not start camera. Index:' , i)
-#            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
-#            cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+
+            if(Camera.camera_number == 1):
+                cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 800)
+                cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 450)
+            elif(Camera.camera_number == 2):
+                cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 640)
+                cameras[i].set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 480)
         framequeue = Queue.Queue(maxsize=Camera.buffer_count)
 
 
@@ -85,14 +92,43 @@ class Camera(BaseCamera):
                 for ret in each:
                     #draw bounding box for the face
                     rect = ret['rect']
-                    cv2.rectangle(images[i],(rect[0],rect[1]),(rect[0] + rect[2],rect[1]+rect[3]),(0,0,255),2)
-                    cv2.putText(images[i], ret['name'],(rect[0],rect[1]),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,255),2)
+                   # cv2.rectangle(images[i],(rect[0],rect[1]),(rect[0] + rect[2],rect[1]+rect[3]),(0,0,255),2)
+                   # cv2.putText(images[i], ret['name'],(rect[0],rect[1]),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,255),2)
+		    cv2.rectangle(images[i],(rect[0],rect[1]),(rect[0] + rect[2],rect[1]+rect[3]),(127,255,0),1)
+					
+					#
+                    # draw thicking corners
+					
+		    int_x=rect[2]/5
+		    int_y=rect[3]/5
+                    cv2.line(images[i],(rect[0],rect[1]),(rect[0] + int_x,rect[1]),(127,255,0),3)
+                    cv2.line(images[i],(rect[0],rect[1]),(rect[0],rect[1]+int_y),(127,255,0),3)
+                    cv2.line(images[i],(rect[0],rect[1]+int_y*4),(rect[0],rect[1]+rect[3]),(127,255,0),3)
+                    cv2.line(images[i],(rect[0],rect[1]+rect[3]),(rect[0] + int_x,rect[1]+rect[3]),(127,255,0),3)
+                    cv2.line(images[i],(rect[0]+ int_x*4,rect[1]+rect[3]),(rect[0] + rect[2],rect[1]+rect[3]),(127,255,0),3)
+                    cv2.line(images[i],(rect[0] + rect[2],rect[1]+rect[3]),(rect[0] + rect[2],rect[1]+int_y*4),(127,255,0),3)
+                    cv2.line(images[i],(rect[0] + rect[2],rect[1]+int_y),(rect[0] + rect[2],rect[1]),(127,255,0),3)
+                    cv2.line(images[i],(rect[0] + int_x*4,rect[1]),(rect[0] + rect[2],rect[1]),(127,255,0),3)
+		    #draw middle line
+		    line_x=rect[2]/8
+                    cv2.line(images[i],(rect[0]-line_x,rect[1]+rect[3]/2),(rect[0] + line_x,rect[1]+rect[3]/2),(127,255,0),1)
+                    cv2.line(images[i],(rect[0]+rect[2]/2,rect[1]+rect[3]-line_x),(rect[0]+rect[2]/2,rect[1]+rect[3]+line_x),(127,255,0),1)
+                    cv2.line(images[i],(rect[0]+line_x*7,rect[1]+rect[3]/2),(rect[0]+line_x*9,rect[1]+rect[3]/2),(127,255,0),1)
+                    cv2.line(images[i],(rect[0]+rect[2]/2,rect[1]-line_x),(rect[0]+rect[2]/2,rect[1]+line_x),(127,255,0),1)
+            	   #write name text
+		   # cv2.putText(images[i], ret['name'],(rect[0],rect[1]),cv2.FONT_HERSHEY_SIMPLEX,1,(100,255,255,255),2)
+                    if(ret['name']!=None and ret['name']!= " " and ret['name']!= ""):
+                        cv2.putText(images[i], ret['name'],(rect[0]+rect[2],rect[1]),cv2.FONT_HERSHEY_COMPLEX,int_y*1.0/40,(242,243,231),2)
+                        cv2.putText(images[i], 'Employee',(rect[0]+rect[2],rect[1]+rect[3]/5),cv2.FONT_HERSHEY_COMPLEX,int_y*1.0/50,(222,223,215),1)
+                        cv2.putText(images[i], 'Digital Networking',(rect[0]+rect[2],rect[1]+rect[3]/3),cv2.FONT_HERSHEY_COMPLEX,int_y*1.0/60,(214,215,206),1)
 
-            # encode as a jpeg image and return it
+
             if (len(images) == 1):
-                final = images[0]
+                final1 = images[0]
+                final = cv2.copyMakeBorder(final1,22,23,232,232, cv2.BORDER_CONSTANT,value=[255,255,255])
             elif (len(images) == 2):
-                final = np.concatenate((images[0], images[1]), axis=1)
+                final1 = np.concatenate((images[0], images[1]), axis=1)
+                final = cv2.copyMakeBorder(final1,48,48,0,0, cv2.BORDER_CONSTANT,value=[255,255,255])
             elif (len(images) == 3):
                 final1 = np.concatenate((images[0], images[1]), axis=1)
                 final2 = np.concatenate((images[2], images[2]), axis=1)
