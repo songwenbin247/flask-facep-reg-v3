@@ -318,7 +318,7 @@ def init_engine(serverip):
     if (serverip == None):
         pass
     else:
-        url  = 'http://{}:8383/train'.format(serverip)
+        url  = 'https://{}/train'.format(serverip)
         load_modules = load_modules_Server
         delete_name = delete_name_Server
         train_start = train_start_Server

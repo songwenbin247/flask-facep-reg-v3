@@ -177,7 +177,6 @@ class MTCNNDetect(object):
                 shape.append(landmark[k])
                 shape.append(landmark[k + 5])
             newlands.append(shape)
-        print rects
         return rects, newlands
 
 
