@@ -25,8 +25,11 @@ import threading
 from face_tracker import *
 import codecs
 import requests
+from fifo_cache import Filter
+from fifo_cache import Anormal
 
-
+filter = Filter(3)
+anormal = Anormal()
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
@@ -207,8 +210,8 @@ def __training_thread_local(callback):
     print("__training_thread_local")
     person_features = {"Left" : [], "Right": [], "Center": []};
     for pos in person_imgs:
-        person_features[pos] = [np.mean(extract_feature.get_features(
-                                         person_imgs[pos]),axis=0).tolist()]
+        list_ = extract_feature.get_features(person_imgs[pos]).tolist()
+        person_features[pos] = [np.mean(anormal.filter(list_), axis = 0).tolist()]
     save_feature_Local(person_name, person_features)
     print("Stop training")
     callback()
@@ -255,10 +258,11 @@ def train_process_people(frames):
     ret_per_frame = []
     rets = []
     if (len(rects) == 1):
-        aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
-        if (len(person_imgs[face_pos]) < 15):
+        pis = filter.get_va(landmarks[0][0], landmarks[0][1])
+        if pis > 3 :
+            aligned_frame, face_pos = aligner.align(160,frame,landmarks[0]);
             person_imgs[face_pos].append(aligned_frame)
-        ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
+            ret_per_frame.append({"name":"", "rect":rects[0], "pos":face_pos})
     rets.append(ret_per_frame)
     return rets
 
