@@ -27,9 +27,12 @@ import codecs
 import requests
 from fifo_cache import Filter
 from fifo_cache import Anormal
+from fifo_cache import HotFaces
+
 
 filter = Filter(3)
 anormal = Anormal()
+hot_faces = HotFaces(10)
 #FRGraph = FaceRecGraph();
 aligner = AlignCustom();
 extract_feature = FaceFeature()
@@ -64,14 +67,15 @@ def recog_process_frame(frames):
     cameras = []
     rets = []
     aligns = []
+    landms = []
     positions = []
 
     for (index,frame) in enumerate(frames):
         cameras.append(CameraRouad())
-        cameras[index].rects, landmarks = face_detect.detect(frame);#min face size is set to 80x80
+        cameras[index].rects, cameras[index].landmarks = face_detect.detect(frame);#min face size is set to 80x80
         face_tracker[index].increase_frame()
         for (i, rect) in enumerate(cameras[index].rects):
-            aligned_face, face_pos = aligner.align(160,frame,landmarks[i])
+            aligned_face, face_pos = aligner.align(160,frame,cameras[index].landmarks[i])
             face = face_tracker[index].get_face_by_position(rect, aligned_face)
             cameras[index].faces.append(face)
             if (1):
@@ -87,13 +91,14 @@ def recog_process_frame(frames):
     for c in cameras:
         aligns += c.aligns
         positions += c.positions
+        landms += c.landmarks
     if (len(aligns) == 0):
         for (index,camera) in enumerate(cameras):
             rets.append(camera.rets)
         return rets
 
     features_arr = extract_feature.get_features(aligns)
-    recog_data = findPeople(features_arr,positions);
+    recog_data = findPeople(features_arr,positions, landms)
 
     j = 0
     for (index,camera) in enumerate(cameras):
@@ -121,7 +126,7 @@ This function basically does a simple linear search for
 ^the 128D vector with the min distance to the 128D vector of the face on screen
 '''
 
-def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
+def findPeople(features_arr, positions, landmarks):
     regRes = [];
     for (i,features_128D) in enumerate(features_arr):
         returnRes = " ";
@@ -133,12 +138,14 @@ def findPeople(features_arr, positions, thres = 0.6, percent_thres = 97):
                 if(distance < smallest):
                     smallest = distance;
                     returnRes = person;
-        percentage =  min(100, 100 * thres / smallest)
-        if percentage > percent_thres :
-            regRes.append(returnRes)
-            #regRes.append(returnRes+"-"+str(round(percentage,1))+"%")
-        else:
-            regRes.append(" ")
+
+        name = hot_faces.revalue(returnRes, landmarks[i], smallest)
+
+        regRes.append(name)
+
+
+        print "know=%s, returnRes = %s   disc =%f " % (name, returnRes, smallest)
+    print "+++++++++++++++++++++++++++++++++++++"
     return regRes
 
 
